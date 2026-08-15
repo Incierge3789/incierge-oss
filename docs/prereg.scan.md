@@ -1,6 +1,7 @@
 # prereg.scan — pre-registration of the forensic content scan
 
-**Status: frozen.** Registered 2026-08-15, before any file was scanned.
+**Status: registered 2026-08-15, before any file was scanned. Amended once, in
+one direction only — see §9.**
 
 This file is the **single definition point** of the pattern table.
 `scripts/scan_forensic.py`, the `pre-commit` hook, and the positive-control tests
@@ -340,3 +341,45 @@ block" would pass even if the class were deleted. Both halves are asserted.
 `path`, `line`, `class`, `pattern`, and `matched`. The log is the evidence that
 the scan ran over the population it claims to have covered; the file count and
 the skipped-path count are recorded alongside.
+
+## 9. Amendment log
+
+A pre-registration that is edited after the results are in is not a
+pre-registration. The rule that makes an amendment legitimate is **direction**,
+and it is stated here rather than assumed:
+
+> An amendment may only make detection **stricter** — add a pattern, widen a
+> pattern's reach, or narrow an exclusion. An amendment that weakens detection
+> requires re-scanning the entire publication set under the amended table and a
+> new entry here saying what was given up.
+>
+> Every amendment re-runs the full scan regardless of direction, because a
+> stricter table can newly hit a file that was already cleared.
+
+Making it stricter after the fact cannot manufacture a pass: it can only
+disqualify more, never less. Loosening is the move that would let a hit be
+argued away, and that is the one this rule constrains.
+
+### Amendment 1 — 2026-08-15, cross-review round 1
+
+Table as registered: sha256
+`16346a46b5549a4f4f9323f47886ff1302360b31eeea9cd3fad853216baf4bab`.
+Two independent reviewers were given the assembled repository and asked to get
+withheld material past the scanner. They did, five ways. All five are closed
+here, and every one of them is **strictly stricter** than the registered table:
+
+| change | direction |
+|---|---|
+| normalization steps 2 and 4 (strip `Cf`/`Mn`, fold confusables) | stricter — more spellings reach the patterns |
+| §2b: every fail pattern also applied to the path | stricter — a filename is now scanned |
+| `c3` placeholder exclusion narrowed to exact tokens | stricter — fewer values excused |
+| `c2_openai_key`, `c6_local_user_path_unix` widened | stricter |
+| `c8_*` plain and cents amounts added; `b1`–`b3` separator optional and 3+ digits; `d1` gains `様`; `d2` katakana added | stricter |
+| `b4` separator kept **required** | narrower than the round-1 draft, still stricter than registered (`\bincierge-\d{3}\b`) — see its `_why_separator_required` |
+
+The full set was re-scanned under the amended table: 0 hits, 0 warnings, 0
+unscannable.
+
+Each closed hole is recorded as that pattern's `example_hit`, so re-opening it
+fails the suite rather than passing quietly. That is the ratchet — the log above
+is prose, the examples are the enforcement.

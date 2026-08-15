@@ -88,16 +88,34 @@ are reported because a claim about a discipline is worth what its numbers are
 worth.
 
 - The instrument that matters most is the human-intervention rate, and it is
-  **red**. Read at 2026-08-15T04:45Z: **18** occasions where the work actually
-  moved back to a person and **53** attempts to move it, of which **35** were
-  stopped by a gate, over a denominator of **699**.
+  **red** on every reading below.
+
+  **The denominator has two definitions and they differ by a factor of six.**
+  Read at 2026-08-15T05:02:50Z:
+
+  | denominator | what it counts | reading |
+  |---|---|---|
+  | responses *(the tool's default)* | assistant responses | 19 / 764 = **0.0249** |
+  | tasks *(matches the metric's own name)* | real user utterances | 7 / 50 = **0.14** |
+
+  The metric is named `human_intervention_requests / completed_tasks`, so the
+  second row is the one that means what the name says. **The default is the
+  flattering one**, and it is flattering in a specific way: responses grow with
+  how much the system says, so the same number of hand-backs looks better the
+  more it talks. Earlier versions of this section published only the default.
+  Both are printed here because the verdict does not depend on the denominator —
+  and a difference that never reaches the verdict is a difference that travels
+  into published numbers unchallenged. Filed as an open defect.
+
+  On the same reading, 55 attempts to hand work back were made and
+  36 of them were stopped by a gate.
 
   **The pass condition is numerator zero, not a threshold.** The private
   system's canon states a target of `< 0.05` and then says explicitly that the
   target is a waypoint and not the pass line; the instrument contains no
-  threshold at all, only `GREEN if numerator == 0 else RED`. So 0.0258 is red,
-  and 0.0112 would also be red. A target you can reach by tightening a threshold
-  is not the target.
+  threshold at all, only `GREEN if numerator == 0 else RED`. Both rows above are
+  red, and 0.0249 would be red even though it satisfies the target. A
+  target you can reach by tightening a threshold is not the target.
 
   **One thing about that numerator is unresolved, and hiding it would be the
   same defect this repository is about.** The canon permits human involvement
@@ -109,12 +127,10 @@ worth.
   form of a hand-off, not the kind of decision behind it. Filed as an open
   defect against the private system rather than settled by picking a side here.
 
-  **The denominator is a proxy, and it is labelled more confidently than it
-  measures.** It counts assistant responses, under the field name "completed
-  tasks", over a window that defaults to the current day. Two consequences worth
-  stating plainly: the rate improves as the system talks more, and the value
-  moves within a single day — an earlier reading the same day was 6 over 104.
-  **This is a reading with a timestamp, not a property of this repository.**
+  **These are readings with a timestamp, not properties of this repository.**
+  They move within a single day; an earlier reading the same day was 6 / 104 on
+  the default denominator.
+
 - The phase order and the gate chain described here are the ones the private
   system runs on. `scripts/tautological_control_gate.py` came from that system
   rather than being reimplemented for publication — but it is **one of the five

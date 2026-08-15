@@ -492,3 +492,29 @@ as unconditional while the code was conditional. Both now say what the code does
 Round 3 of self-falsification, after both reviewers had finished, found one more:
 the staged-file enumeration used `--diff-filter=ACMR`, which omits type changes,
 so replacing a tracked file with a symlink put its target beyond the guard.
+
+### Amendment 4 — 2026-08-15, self-falsification
+
+Two changes, and the second is the one that needed a rule.
+
+**The interrupt cleanup in the demo is now observed firing.** It had been listed
+as not-fixed on the grounds that nobody had seen it work, which by §7's rule
+means absent. It now has a control that interrupts a real run mid-plant and
+asserts the file is gone — with a negative control that removes the trap and
+shows the file surviving, so the assertion is measuring the trap and not the
+shell tidying up on its own.
+
+**The filesystem population now honours the path guard.** Outside a git work
+tree — a downloaded tarball — `--all` walked everything, and a `__pycache__`
+left by an earlier run made the whole scan exit 2, because a `.pyc` is binary
+and binaries are rejected. It now skips what `.gitignore` names, so the
+population means the same thing in both modes: what would be published.
+
+That second change **reduces** what is scanned, which §9 calls a loosening and
+requires an accounting of what was given up. What was given up: material sitting
+in a path-guarded directory is no longer read by `--all`. What that cannot cost:
+those paths cannot be committed, so nothing there can reach a publication. The
+two guards are complementary — the path guard decides what may be staged, the
+content guard reads what was staged — and the staged scan (`--staged`, the one
+the hook runs) is unaffected by this change. Negations in `.gitignore` are
+ignored rather than half-implemented, which keeps the file in the population.

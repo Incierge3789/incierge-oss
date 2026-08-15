@@ -419,24 +419,65 @@ def staged_paths(root: pathlib.Path) -> list:
     return [l.strip() for l in r.stdout.splitlines() if l.strip()]
 
 
+def _gitignore_globs(root: pathlib.Path) -> list:
+    """The repository's own path guard, read as globs.
+
+    Used only by the filesystem fallback, so that the population means the same
+    thing in both modes: what would be published. Negations are ignored rather
+    than half-implemented — a `!` line is treated as no rule at all, which
+    keeps the file in the population, which is the fail-closed direction.
+    """
+    out = []
+    try:
+        lines = (root / ".gitignore").read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return out
+    for raw in lines:
+        line = raw.split("#", 1)[0].strip()
+        if not line or line.startswith("!"):
+            continue
+        line = line.rstrip("/")
+        out.append(line.lstrip("/"))
+    return out
+
+
+def _ignored(rel: str, globs) -> bool:
+    parts = rel.split("/")
+    for g in globs:
+        if fnmatch.fnmatch(rel, g) or fnmatch.fnmatch(rel, g + "/*"):
+            return True
+        if "/" not in g and any(fnmatch.fnmatch(part, g) for part in parts):
+            return True
+    return False
+
+
 def all_paths(root: pathlib.Path) -> tuple:
     """The publication population.
 
     Inside a git work tree that is the tracked set, because that is what would
     actually be published; build caches and ignored scratch are not part of it.
-    Outside one it is every file on disk, and the caller is told which
-    population was used — a coverage claim that does not say what it covered is
-    not a coverage claim.
+
+    Outside one — a downloaded tarball, say — it is the filesystem minus what
+    `.gitignore` names, for the same reason. Walking everything instead was
+    measured as a defect: a `__pycache__` left by an earlier run made the whole
+    scan exit 2, since a `.pyc` is binary and binaries are rejected. The caller
+    is told which population was used either way; a coverage claim that does not
+    say what it covered is not a coverage claim.
     """
     r = subprocess.run(["git", "-C", str(root), "ls-files", "-z"],
                        capture_output=True, text=True)
     if r.returncode == 0 and r.stdout.strip("\0").strip():
         return [f for f in r.stdout.split("\0") if f], "git-tracked"
+    globs = _gitignore_globs(root)
     out = []
     for p in sorted(root.rglob("*")):
-        if p.is_file() and ".git" not in p.parts:
-            out.append(p.relative_to(root).as_posix())
-    return out, "filesystem-walk"
+        if not p.is_file() or ".git" in p.parts:
+            continue
+        rel = p.relative_to(root).as_posix()
+        if _ignored(rel, globs):
+            continue
+        out.append(rel)
+    return out, "filesystem-walk (path guard applied)"
 
 
 # --------------------------------------------------------------------------

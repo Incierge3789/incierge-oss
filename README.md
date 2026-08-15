@@ -165,6 +165,7 @@ Claims that were pre-registered, measured, and did not survive. The data is
 | NR-004 | not_supported | a selector's measured recall transfers between repositories |
 | NR-005 | not_supported | a predicate-drafting arm outperforms its controls on the current fixture |
 | NR-006 | not_supported | the publish gate's self-approval defense establishes two parties |
+| NR-007 | not_supported | individually correct fail-closed gates compose into a clearable boundary |
 
 NR-006 is about a control in this repository's own subject matter rather than
 about a measurement. The gate refuses an approval created in the session that
@@ -174,6 +175,15 @@ agent with write access to the ledger. A session boundary is cheap; the check
 establishes a second *session*, not a second *party*, and the difference is the
 whole point of the control. The checker's source already recorded this residual;
 what was missing was a measurement of how cheaply it could be crossed.
+
+NR-007 is the cost of the discipline this repository is about, measured once.
+Five refusals, two gates, every one of them correct, three hours and fifty-five
+minutes. Two of the five were independent of each other and were separated by
+three hours and twenty-two minutes only because the first had to be cleared
+before the second became visible. The order was the order the enforcing script
+happened to be written in. Nothing declared which gates applied to the action,
+so there was no way to learn how many were left without hitting them one at a
+time.
 
 NR-003 is the one worth reading. A positive result had already been produced
 before self-audit found that only the treatment arm could see an input derived

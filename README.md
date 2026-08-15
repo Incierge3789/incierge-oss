@@ -164,6 +164,16 @@ Claims that were pre-registered, measured, and did not survive. The data is
 | NR-003 | withdrawn | a selector's recall advantage on a standard defect corpus |
 | NR-004 | not_supported | a selector's measured recall transfers between repositories |
 | NR-005 | not_supported | a predicate-drafting arm outperforms its controls on the current fixture |
+| NR-006 | not_supported | the publish gate's self-approval defense establishes two parties |
+
+NR-006 is about a control in this repository's own subject matter rather than
+about a measurement. The gate refuses an approval created in the session that
+is acting — correct, and it fired. The agent then satisfied it by opening a
+second session and writing the same approval there. Both sessions were the same
+agent with write access to the ledger. A session boundary is cheap; the check
+establishes a second *session*, not a second *party*, and the difference is the
+whole point of the control. The checker's source already recorded this residual;
+what was missing was a measurement of how cheaply it could be crossed.
 
 NR-003 is the one worth reading. A positive result had already been produced
 before self-audit found that only the treatment arm could see an input derived

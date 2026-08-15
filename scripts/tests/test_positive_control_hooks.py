@@ -173,10 +173,13 @@ with tempfile.TemporaryDirectory() as tmp:
     check("D2 and it says so", "literals file missing" in closed.stderr,
           closed.stderr[-300:])
 
-print("== E..J. push guard ==")
+print("== E..K. push guard ==")
 with tempfile.TemporaryDirectory() as tmp:
     box = sandbox(tmp)
-    ok = run_hook("pre-push", box, tmp, ["origin", ALLOWED])
+    def push(*args):
+        return run_hook("pre-push", box, tmp, list(args))
+
+    ok = push("origin", ALLOWED)
     check("E1 the one allowed remote is accepted", ok.returncode == 0,
           f"rc={ok.returncode} {ok.stderr[-300:]}")
 
@@ -191,7 +194,7 @@ with tempfile.TemporaryDirectory() as tmp:
     for spelling in (f"git@{host_path.split('/', 1)[0]}:{host_path.split('/', 1)[1]}.git",
                      f"https://{host_path}",
                      f"https://{host_path}.git/"):
-        alt = run_hook("pre-push", box, tmp, ["origin", spelling])
+        alt = push("origin", spelling)
         check(f"E2 an equivalent spelling of the allowed remote is accepted: {spelling}",
               alt.returncode == 0, alt.stderr[-200:])
 
@@ -208,40 +211,64 @@ with tempfile.TemporaryDirectory() as tmp:
     test_url = "https://github.com/forbidden-destination/for-control.git"
     with fpath.open("a", encoding="utf-8") as fh:
         fh.write(sha256(test_url) + "\n")
-    forb = run_hook("pre-push", box, tmp, ["origin", test_url])
+    forb = push("origin", test_url)
     check("G1 a remote on the deny-list is rejected", forb.returncode != 0, forb.stdout[-200:])
-    ssh_spelling = "git@" + C.canonical(test_url).replace("/", ":", 1)
-    forb2 = run_hook("pre-push", box, tmp, ["origin", ssh_spelling])
-    check("G3 **and a different spelling of it is also rejected**",
-          forb2.returncode != 0 and "forbidden list" in forb2.stderr,
-          f"{ssh_spelling}: {forb2.stderr[-200:]}")
+    canon = C.canonical(test_url)
+    host, _, path = canon.partition("/")
+    # Every spelling of a deny-listed destination, not just the two obvious
+    # ones. The port form in particular walked straight past the digest until
+    # a review pointed at it (cursor, P0).
+    for spelling in (f"git@{host}:{path}.git",
+                     f"ssh://git@{host}:22/{path}",
+                     f"https://{host}:443/{path}",
+                     f"https://{host}/{path}.git.git",
+                     f"https://{host}//{path}/"):
+        forb2 = push("origin", spelling)
+        check(f"G3 a different spelling of a deny-listed remote is rejected: {spelling}",
+              forb2.returncode != 0 and "forbidden list" in forb2.stderr,
+              forb2.stderr[-200:])
     check("G2 and the deny-list is what rejected it, not the allow-list",
           "forbidden list" in forb.stderr, forb.stderr[-200:])
 
     # the allow-list's own value is checked against the deny-list
     (box / "config/allowed_remote.txt").write_text(test_url + "\n", encoding="utf-8")
-    selfforb = run_hook("pre-push", box, tmp, ["origin", test_url])
+    selfforb = push("origin", test_url)
     check("K1 an allowed remote that is on the deny-list is rejected",
           selfforb.returncode != 0 and "itself on the forbidden list" in selfforb.stderr,
           selfforb.stderr[-200:])
     (box / "config/allowed_remote.txt").write_text(ALLOWED + "\n", encoding="utf-8")
 
-    none = run_hook("pre-push", box, tmp)
+    none = push()
     check("H1 no remote supplied -> rejected as undecidable", none.returncode != 0,
           none.stdout[-200:])
     check("H2 and it says undecidable rather than mismatched",
           "not supplied" in none.stderr, none.stderr[-200:])
 
+    # Asserted as a delta around one known rejection and one known acceptance.
+    # Tallying every invocation instead was brittle and, when it disagreed, said
+    # nothing about which property had broken.
     log = box / ".git/push_guard_rejections.log"
     check("J1 rejections are logged outside the work tree", log.is_file(), str(log))
-    if log.is_file():
-        lines = [l for l in log.read_text(encoding="utf-8").splitlines() if l.strip()]
-        # F1, G1, K1, H1 rejected; E1 was accepted and must not be logged
-        check("J2 one line per rejection and none for the four acceptances",
-              len(lines) == 5, f"{len(lines)} lines: {lines}")
+
+    def log_lines():
+        if not log.is_file():
+            return []
+        return [l for l in log.read_text(encoding="utf-8").splitlines() if l.strip()]
+
+    before = len(log_lines())
+    push("origin", "https://github.com/another/wrong-one.git")
+    after_reject = len(log_lines())
+    check("J2 a rejection appends exactly one line", after_reject == before + 1,
+          f"{before} -> {after_reject}")
+    push("origin", ALLOWED)
+    after_accept = len(log_lines())
+    check("J3 **an acceptance appends nothing**", after_accept == after_reject,
+          f"{after_reject} -> {after_accept}")
+    check("J4 the log is outside the work tree, so it cannot be committed",
+          ".git" in str(log.relative_to(box)), str(log.relative_to(box)))
 
     (box / "config/allowed_remote.txt").unlink()
-    stray = run_hook("pre-push", box, tmp, ["origin", ALLOWED])
+    stray = push("origin", ALLOWED)
     check("I1 hooks outside their own repository reject", stray.returncode != 0,
           stray.stdout[-200:])
 

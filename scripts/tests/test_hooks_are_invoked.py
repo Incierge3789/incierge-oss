@@ -135,13 +135,25 @@ with tempfile.TemporaryDirectory() as tmp:
     check("C3 **and the receiving repository got nothing**", objects == 0,
           f"{objects} objects arrived")
 
-    allowed = [l.split("#", 1)[0].strip() for l in
-               (work / "config/allowed_remote.txt").read_text(encoding="utf-8").splitlines()]
-    allowed = next(a for a in allowed if a)
-    direct = subprocess.run([str(work / "scripts/hooks/pre-push"), "origin", allowed],
-                            cwd=work, env=env, capture_output=True, text=True, timeout=60)
-    check("D1 **negative control**: the permitted remote is accepted by the same hook",
-          direct.returncode == 0, direct.stderr[-300:])
+    # A real accepting push, not just the hook returning 0. Cross-review
+    # (cursor, P1) noted that only the *rejecting* side went through git, so
+    # "pushes still work" was never actually demonstrated. The allowed remote
+    # is repointed at the local throwaway repository for the duration, so
+    # nothing leaves the machine and the assertion is that objects arrive.
+    allowed_file = work / "config/allowed_remote.txt"
+    original = allowed_file.read_text(encoding="utf-8")
+    allowed_file.write_text(str(bare) + "\n", encoding="utf-8")
+    ok_push = git(["push", "elsewhere", "main"], work, env)
+    arrived = git(["count-objects", "-v"], bare, env).stdout
+    n_after = next((int(l.split(":")[1]) for l in arrived.splitlines()
+                    if l.startswith("count:")), -1)
+    remote_head = git(["rev-parse", "main"], bare, env).stdout.strip()
+    local_head = git(["rev-parse", "main"], work, env).stdout.strip()
+    check("D1 **negative control**: a push to the permitted remote succeeds",
+          ok_push.returncode == 0, ok_push.stderr[-300:])
+    check("D2 and the objects actually arrived", remote_head == local_head and n_after >= 0,
+          f"remote {remote_head[:8]} vs local {local_head[:8]}")
+    allowed_file.write_text(original, encoding="utf-8")
 
 print(f"\nhooks-are-invoked: FAIL {len(FAILED)}")
 sys.exit(1 if FAILED else 0)

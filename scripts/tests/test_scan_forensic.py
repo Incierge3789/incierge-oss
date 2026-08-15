@@ -62,6 +62,34 @@ check("N7 a soft hyphen inside the literal does not hide it",
 cyr = base.replace("e", "е", 1) if "e" in base else base.replace("a", "а", 1)
 check("N8 a Cyrillic lookalike character does not hide it",
       len(hits(cyr, "a_proper_noun")) > 0, repr(cyr))
+# N8 only proves the mixed-script case: one substitution leaves Latin behind.
+# A round of review got a payload through by using *no* Latin at all, so the
+# all-lookalike spelling gets its own control (cursor, P0).
+#
+# The payloads are selected out of the pattern table by the property being
+# tested, never written here. Written here they would be withheld strings
+# sitting in a file the scan reads, which is how the previous attempt at this
+# control disqualified its own test file.
+import unicodedata  # noqa: E402
+
+all_hits = [h for c in prereg["classes"] for spec in c.get("patterns") or []
+            for h in [spec.get("example_hit"), *(spec.get("example_hits") or [])] if h]
+no_latin = [h for h in all_hits
+            if any(ch in S.CONFUSABLES for ch in h)
+            and not any("a" <= ch.lower() <= "z" for ch in h)]
+odd_dash = [h for h in all_hits
+            if any(unicodedata.category(ch) == "Pd" and ch != "-" for ch in h)]
+check("N9a the table declares an all-lookalike example", len(no_latin) > 0,
+      "no declared example exercises the no-Latin path")
+check("N9b a token with no Latin at all is still folded",
+      all(len(S.scan_text(h, PATTERNS, "<t>")) > 0 for h in no_latin), str(no_latin))
+check("N10a the table declares a non-ASCII-dash example", len(odd_dash) > 0,
+      "no declared example exercises the dash path")
+check("N10b a non-ASCII dash is normalized to a hyphen",
+      all(len(S.scan_text(h, PATTERNS, "<t>")) > 0 for h in odd_dash), str(odd_dash))
+check("N11 a literal separator may be . or /",
+      all(len(hits(lit.replace("-", sep), "a_proper_noun")) > 0 for sep in (".", "/")),
+      lit)
 
 print("== the path is scanned, not just the contents ==")
 for cls, payload in sorted(S.positive_controls(prereg, lits).items()):
@@ -129,10 +157,12 @@ for cid, p in paired:
           f"{len(own)} compiled patterns named {p['name']}")
     if not own:
         continue
-    check(f"X-hit  {p['name']} fires on its declared example",
-          len(S.scan_text(p["example_hit"], own, "<t>")) > 0, p["example_hit"])
-    check(f"X-miss {p['name']} **does not** fire on its declared exclusion",
-          len(S.scan_text(p["example_miss"], own, "<t>")) == 0, p["example_miss"])
+    for h in [p["example_hit"], *p.get("example_hits", [])]:
+        check(f"X-hit  {p['name']} fires on {h!r}",
+              len(S.scan_text(h, own, "<t>")) > 0, h)
+    for miss in [p["example_miss"], *p.get("example_misses", [])]:
+        check(f"X-miss {p['name']} **does not** fire on {miss!r}",
+              len(S.scan_text(miss, own, "<t>")) == 0, miss)
 
 print("== severity ==")
 warn_cls = [c["id"] for c in prereg["classes"] if c.get("severity") == "warn"]

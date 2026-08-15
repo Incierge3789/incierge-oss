@@ -77,19 +77,23 @@ _MARKS = frozenset(chr(c) for c in _STRIPPED_MARKS)
 
 
 def _fold_confusables(token: str) -> str:
-    """Fold lookalikes only inside a token that mixes scripts.
+    """Fold lookalikes, everywhere.
 
-    A token written entirely in Greek or Cyrillic is ordinary text in that
-    language, and folding it produced false positives: a Greek word folded into
-    something that matched an identifier pattern and disqualified an innocent
-    file (agy, P1; the worked example is in docs/prereg.scan.md §9). The attack
-    this defends against is a lookalike smuggled *into* a Latin word, so folding
-    is applied only where Latin and a confusable script appear in one token.
+    An earlier version folded only inside tokens that also contained ASCII
+    letters, to spare innocent Greek text from being disqualified (agy, P1).
+    The next round showed what that bought: a withheld identifier spelled
+    *entirely* in Greek or Cyrillic lookalikes went straight through (cursor,
+    P0).
+
+    That narrowing was also a rule violation. Amendment direction (§9) permits
+    only changes that make detection stricter, and this one made it weaker —
+    which is exactly the move the rule exists to catch, and it went unnoticed
+    for a round. Reverted.
+
+    The trade is not symmetric. A false positive removes a file from the
+    publication set and writes a line in an append-only log; a false negative
+    publishes something that was meant to be withheld and cannot be recalled.
     """
-    if not any(ch in CONFUSABLES for ch in token):
-        return token
-    if not any("a" <= ch <= "z" for ch in token):
-        return token
     return token.translate(_CONFUSABLE_TABLE)
 
 
@@ -97,22 +101,35 @@ def normalize(text: str) -> str:
     """The normalization declared in prereg.scan.md §2.
 
     NFKC, casefold, drop format characters and Latin-range combining marks,
-    then fold declared confusables in mixed-script tokens. Casefolding runs
-    before the strip because casefolding some characters *produces* combining
-    marks, and stripping first would leave those behind (agy, P1).
+    map every Unicode dash to ASCII hyphen, then fold declared confusables.
+
+    Casefolding runs before the strip because casefolding some characters
+    *produces* combining marks, and stripping first would leave those behind
+    (agy, P1). The dash mapping is here because U+2011 is neither a format nor
+    a combining character, renders as a hyphen, and walked past every separator
+    class in the table (cursor, P0).
     """
     t = unicodedata.normalize("NFKC", text).casefold()
-    t = "".join(ch for ch in t
+    t = "".join("-" if unicodedata.category(ch) == "Pd" else ch
+                for ch in t
                 if unicodedata.category(ch) != "Cf" and ch not in _MARKS)
-    return re.sub(r"\S+", lambda m: _fold_confusables(m.group(0)), t)
+    return _fold_confusables(t)
 
 
 def _literal_to_regex(literal: str) -> str:
-    """Separator expansion: '-', '_' and space inside a literal become [\\s\\-_]*."""
-    parts = [p for p in re.split(r"[-_\s]+", literal) if p]
+    """Separator expansion inside a literal.
+
+    `-`, `_`, space, `.` and `/` are all treated as the same nothing, so one
+    declared literal covers every spelling that differs only by separator. The
+    dot and slash were added after a review pointed out that the narrower set
+    left two obvious spellings uncovered (cursor, P2). Worked examples are in
+    docs/prereg.scan.md §2 step 6 — spelling them here would plant a literal
+    from the deny-list in a file the deny-list is applied to.
+    """
+    parts = [p for p in re.split(r"[-_\s./]+", literal) if p]
     if not parts:
         raise Undecidable(f"empty literal in literals file: {literal!r}")
-    return r"[\s\-_]*".join(re.escape(p) for p in parts)
+    return r"[\s\-_./]*".join(re.escape(p) for p in parts)
 
 
 # --------------------------------------------------------------------------

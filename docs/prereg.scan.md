@@ -33,24 +33,43 @@ Applied to every line before matching:
 
 1. Unicode `NFKC` normalization — full-width and half-width forms become the
    same string, so `ＡＥＧＩＳ` and `AEGIS` cannot be distinguished by the writer.
-2. **Format and combining characters are dropped** (Unicode categories `Cf` and
-   `Mn`). A zero-width space, a zero-width joiner, a soft hyphen or a byte-order
-   mark inserted into the middle of a withheld word makes it render identically
-   and match nothing; removing them first closes that.
-3. `str.casefold()` — case is ignored.
-4. **Declared confusables are folded** — a fixed table of Cyrillic and Greek
-   characters that render as Latin ones (`а е о р с у х і ј ѕ`, `ο α ε ρ ι`, and
-   a few more) is mapped to Latin. The table is in `scripts/scan_forensic.py`
-   as `CONFUSABLES`.
-5. Literal patterns additionally undergo **separator expansion**: any `-`, `_`,
-   or space inside a declared literal is compiled to `[\s\-_]*`, so a literal
-   written as `acme-tek` matches `acmetek`, `acme tek`, `acme_tek`, `acme-tek`,
-   and `AcmeTek`.
+2. `str.casefold()` — case is ignored. This runs **before** the next step,
+   because casefolding some characters produces combining marks, and stripping
+   first would leave those behind.
+3. **Format characters are dropped** (Unicode category `Cf`), and so are
+   combining marks — but only those in the Latin-range diacritic blocks and the
+   variation selectors, **not every `Mn`**. A zero-width space, joiner, soft
+   hyphen or byte-order mark inserted into a withheld word makes it render
+   identically and match nothing; dropping them closes that. Dropping *all*
+   combining marks would instead mangle scripts that need them to spell
+   ordinary words — Devanagari nukta, Arabic harakat, Ainu kana — so the range
+   is bounded. The exact ranges are `_STRIPPED_MARKS` in
+   `scripts/scan_forensic.py`.
+4. **Every Unicode dash becomes an ASCII hyphen** (category `Pd`). U+2011 is
+   neither a format character nor a combining mark, renders as a hyphen, and
+   walked past every separator class in the table.
+5. **Declared confusables are folded, everywhere** — a fixed table of Cyrillic
+   and Greek characters that render as Latin ones (`а е о р с у х і ј ѕ`,
+   `ο α ε ρ ι`, and a few more) is mapped to Latin. The table is
+   `CONFUSABLES` in `scripts/scan_forensic.py`.
+6. Literal patterns additionally undergo **separator expansion**: `-`, `_`,
+   space, `.` and `/` inside a declared literal are all treated as the same
+   nothing, so a literal written `acme-tek` matches `acmetek`, `acme tek`,
+   `acme_tek`, `acme.tek`, `acme/tek` and `AcmeTek`.
 
 A file can therefore not evade the scan by re-casing, re-spacing, switching to
 full-width characters, or inserting invisible characters.
 
-**Known limit on step 4.** The confusable table is the common half of the
+**Step 5 folds unconditionally, and that is a decision.** An earlier version
+folded only inside tokens that also contained ASCII letters, so that ordinary
+Greek or Cyrillic text would not be disqualified. That version let a withheld
+identifier spelled *entirely* in lookalikes through. Unconditional folding
+means a Greek word can occasionally fold into something a pattern matches, and
+that file is removed from the publication set with a line in an append-only
+log. The trade is not symmetric: a false positive is recoverable and logged, a
+false negative is published.
+
+**Known limit on step 5.** The confusable table is the common half of the
 attack, not the full Unicode confusables set. A determined writer can still find
 a lookalike codepoint outside it — Cherokee and Canadian Aboriginal syllabics
 both contain Latin-shaped characters. Closing that properly needs a confusables
@@ -211,7 +230,7 @@ declared-empty), which is why §5b forces that to be printed rather than assumed
       "_scan_paths_why": "these are names of things and turn up in file names. The cost is that a project with unrelated assets such as textures/ao_001.png will see hits; class (b) is the most project-specific class here and an adopter is expected to replace it.",
       "source": "inline",
       "patterns": [
-        {"name": "b1_filed_patent_id", "regex": "\\bpat[\\s\\-_#.:]?\\d{3,}\\b", "example_hit": "PAT-9999", "example_miss": "compatibility"},
+        {"name": "b1_filed_patent_id", "regex": "\\bpat[\\s\\-_#.:]?\\d{3,}\\b", "example_hit": "PAT-9999", "example_hits": ["\u03c1\u03b1\u03c4-9999", "\u0440\u0430\u0442-9999", "PAT\u20119999", "PAT 9999", "PAT:9999"], "example_miss": "compatibility"},
         {"name": "b2_future_patent_id", "regex": "\\bfp[\\s\\-_#.:]?\\d{3,}\\b"},
         {"name": "b3_objective_id", "regex": "\\bao[\\s\\-_#.:]?\\d{3,}\\b"},
         {"name": "b4_applicant_label", "regex": "\\bincierge[\\s\\-_#.:]\\d{3,}\\b", "example_hit": "applicant: Incierge-1001", "example_miss": "github.com/Incierge3789/incierge-oss", "_why_separator_required": "unlike the other three, dropping the separator here collides with the account name Incierge3789, which appears in the README and in config/allowed_remote.txt. Widening it flagged both. The applicant label always carries the hyphen."},
@@ -244,8 +263,9 @@ declared-empty), which is why §5b forces that to be printed rather than assumed
         {
           "name": "c3_assigned_credential",
           "regex": "(?:api[_-]?key|secret|token|password|passwd|passphrase|credential|private[_-]?key)\\s*[:=]\\s*[\"']([^\"'\\n]{8,})[\"']",
-          "exclude_if_group1_matches": "^(?:<[^>]*>|\\$\\{[^}]*\\}|\\$[a-z_][a-z0-9_]*|x{3,}|\\*{3,}|\\.{3,}|changeme|change[_-]me|placeholder|redacted|example|example[_-]key|dummy|sample|fake|test|testing|test[_-]key|your[_-](?:api[_-])?(?:key|token|secret|password)(?:[_-]here)?|\\{\\{[^}]*\\}\\}|\\{[a-z0-9_ ]+\\}|%[a-z0-9_]+%|@[a-z0-9_]+@|replace[_-]me|replace[_-]with[_-].*|undefined|password|passwd|secret|token|mock[_-].*|default[_-].*|null|none|true|false|\\d+|os\\.environ.*|process\\.env.*|secrets\\..*|env\\[.*)$",
+          "exclude_if_group1_matches": "^(?:<[^>]*>|\\$\\{[^}]*\\}|\\$[a-z_][a-z0-9_]*|x{3,}(?:[\\-_]x{3,})*|\\*{3,}|\\.{3,}|changeme|change[_-]me|placeholder|redacted|example|example[_-]key|dummy|sample|fake|test|testing|test[_-]key|your[_-](?:api[_-])?(?:key|token|secret|password)(?:[_-]here)?|\\{\\{[^}]*\\}\\}|\\{[a-z0-9_ .\\-]+\\}|%[a-z0-9_]+%|@[a-z0-9_]+@|replace[_-]me|replace[_-]with[_-].*|undefined|password|passwd|secret|token|mock[_-].*|default[_-].*|null|none|true|false|\\d+|os\\.environ.*|process\\.env.*|secrets\\..*|env\\[.*)$",
           "example_hit": "password = \"example_hunter2_production\"",
+          "example_misses": ["password = \"{api-key}\"", "api_key = \"xxxx-xxxx-xxxx-xxxx\"", "token = \"{{ CI_TOKEN }}\"", "secret = \"%BUILD_SECRET%\"", "password = \"replace_me\""],
           "example_miss": "api_key = \"${SOME_ENV_VAR}\""
         },
         {
@@ -438,3 +458,37 @@ appeared and was fixed rather than excused: the scanner's own source comments
 quoted `ao_001` and `pat-100` as counterexamples, which its own widened patterns
 then matched. The worked examples now live here, in the one file the scan does
 not read.
+
+### Amendment 3 — 2026-08-15, cross-review round 2 (second basis)
+
+The second reviewer of round 2 found that **amendment 2 had itself broken the
+direction rule**, and neither I nor the first reviewer noticed for a round.
+
+Amendment 2 narrowed confusable folding to mixed-script tokens, to spare
+innocent Greek text. That is a *loosening* — it made detection weaker — and §9
+permits only the opposite. The cost was immediate and concrete: a withheld
+identifier spelled entirely in Greek or Cyrillic lookalikes went straight
+through. Folding is unconditional again, and the trade is stated in §2 instead
+of being decided quietly in the code.
+
+That is the rule doing its job one round late, which is worth recording plainly:
+the log is what made the violation legible afterwards, and nothing in the suite
+would have caught it, because a control cannot notice a case nobody wrote.
+
+Also closed in this amendment, all in the permitted direction:
+
+| hole | closed by |
+|---|---|
+| `PAT‑9999` with U+2011 — neither a format character nor a combining mark, renders as a hyphen | every Unicode `Pd` becomes an ASCII hyphen (§2 step 4) |
+| a literal written `acme.tek` or `acme/tek` did not match the literal `acme-tek` | `.` and `/` joined the separator expansion (§2 step 6) |
+| the deny-list digest missed `host:22`, `repo.git.git`, `//`, and percent-encoded spellings of the same destination | `canonical_remote.py` strips the port, repeated suffixes, duplicate slashes, and percent-encoding |
+| `{api-key}` and `xxxx-xxxx-xxxx-xxxx` were reported as secrets — the pressure that gets a guard switched off | those forms added to the `c3` exclusion as exact shapes |
+
+And two documentation defects, which matter because this file is the definition
+point: §2 still claimed **all** `Mn` were stripped when the implementation had
+already been narrowed to the Latin ranges, and the confusable step was described
+as unconditional while the code was conditional. Both now say what the code does.
+
+Round 3 of self-falsification, after both reviewers had finished, found one more:
+the staged-file enumeration used `--diff-filter=ACMR`, which omits type changes,
+so replacing a tracked file with a symlink put its target beyond the guard.

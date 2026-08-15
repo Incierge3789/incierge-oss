@@ -35,13 +35,22 @@ import argparse
 import hashlib
 import re
 import sys
+import urllib.parse
 
 SCHEME = re.compile(r"^[a-z][a-z0-9+.-]*://", re.I)
-SCP_LIKE = re.compile(r"^(?:([^@/]+)@)?([^:/]+):(?!//)(.+)$")
+SCP_LIKE = re.compile(r"^(?:([^@/]+)@)?([^:/]+):(?!//)(?!\d+/)(.+)$")
+HOST_PORT = re.compile(r":\d+$")
 
 
 def canonical(url: str) -> str:
-    """host/path, lower-cased, with scheme, userinfo, .git and trailing / removed."""
+    """host/path, lower-cased, with scheme, userinfo, port, .git and slashes removed.
+
+    The port, a repeated ``.git`` suffix and percent-encoding were all left in
+    by the first version, and each was a way to write the same destination so
+    that its digest no longer matched a deny-list entry (cursor, P0). Every
+    normalization here collapses spellings together, which is the direction a
+    deny-list needs.
+    """
     u = url.strip()
     if not u:
         return ""
@@ -52,10 +61,14 @@ def canonical(url: str) -> str:
         u = SCHEME.sub("", u)
         if "@" in u.split("/", 1)[0]:      # userinfo@host/...
             u = u.split("@", 1)[1]
+    u = urllib.parse.unquote(u)
+    host, _, rest = u.partition("/")
+    host = HOST_PORT.sub("", host)         # host:22 and host:443 are host
+    u = f"{host}/{rest}" if rest else host
+    u = re.sub(r"/{2,}", "/", u)
     u = u.rstrip("/")
-    if u.endswith(".git"):
-        u = u[: -len(".git")]
-    u = u.rstrip("/")
+    while u.endswith(".git"):              # repo.git.git is repo
+        u = u[: -len(".git")].rstrip("/")
     return u.lower()
 
 

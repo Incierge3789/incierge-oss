@@ -122,6 +122,7 @@ Claims that were pre-registered, measured, and did not survive. The data is
 | NR-002 | not_supported | ordering work by estimated expected loss beats a simple structural rule |
 | NR-003 | withdrawn | a selector's recall advantage on a standard defect corpus |
 | NR-004 | not_supported | a selector's measured recall transfers between repositories |
+| NR-005 | not_supported | a predicate-drafting arm outperforms its controls on the current fixture |
 
 NR-003 is the one worth reading. A positive result had already been produced
 before self-audit found that only the treatment arm could see an input derived
@@ -153,15 +154,25 @@ withdraw, and the record here already contains one withdrawal (`NR-003`).
 What is claimed is narrower and checkable: the gates in this repository do what
 their controls demonstrate, on the machine you run them on.
 
-## What is deliberately included
+## Where the disclosure line is
 
-`docs/ja/` and the `source` fields in the negative-results ledger name the
-private system's own layer and directory structure. That is a decision, not a
-leak the scanner missed: the layer model is the thing `docs/ja/ARCHITECTURE.md`
-exists to describe, and a provenance pointer with the path removed would not be
-a provenance pointer. What is withheld is the content of those layers — the
-ledgers, the logs, the calibration values, and the identifiers listed in
-`docs/prereg.scan.md`.
+`docs/disclosure.md` — one document, five decidable rules, and the reader is a
+test. Registered criteria and measured values are public; calibration values,
+raw logs, and **structure** (paths, lane names, internal identifier namespaces)
+are private, and the private rules win where two rules disagree.
+
+That document exists because the line used to be a list of categories, and two
+publication paths applied it independently and disclosed different things
+without either breaking a category. An open-world audit — one that ignored the
+pattern table and asked what a stranger could infer — found private paths and an
+internal work-item namespace in the copied documents, and found thresholds and a
+sample size published on one path and withheld on the other.
+
+The repair went both ways: the paths and identifiers came **out** of everything,
+and the English ledger was **raised** to disclose what the Japanese copy already
+did (`NR-005`). Trimming the copy instead would have made the disclosure smaller
+and the process no more consistent. `docs/ja/README.md` records which files are
+still byte-identical to their source and which were adapted, with both digests.
 
 ## On the execution substrate
 

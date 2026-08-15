@@ -50,24 +50,46 @@ check("P2 ids and verdicts agree", readme_pairs == ledger_pairs,
 check("P3 **negative control**: the parse found something to compare",
       len(readme_pairs) > 0, "the regex matched no rows, so P1/P2 would pass vacuously")
 
-print("== docs/ja digest table matches the files actually present ==")
-rows = re.findall(r"^\|\s*`([^`]+)`\s*\|\s*`([0-9a-f]{64})`\s*\|", JA, re.M)
-check("Q0 **negative control**: the digest table parsed", len(rows) >= 5, f"{len(rows)} rows")
-for rel, want in rows:
-    p = REPO / rel
-    if not p.is_file():
-        check(f"Q1 {rel} exists", False, "listed in the digest table but not present")
+print("== docs/ja provenance: verbatim rows match, adapted rows are declared ==")
+# Two tables, and the difference is the claim. A verbatim row asserts the
+# published bytes equal the source bytes. An adapted row asserts they do NOT,
+# and says what changed. Checking only the first kind would let an edited file
+# keep a verbatim claim, which is the failure this split exists to prevent.
+verbatim = re.findall(r"^\|\s*`([^`]+)`\s*\|\s*`([0-9a-f]{64})`\s*\|[^|]*\|\s*$", JA, re.M)
+adapted = re.findall(r"^\|\s*`([^`]+)`\s*\|\s*`([0-9a-f]{64})`\s*\|\s*`([0-9a-f]{64})`\s*\|", JA, re.M)
+check("Q0 **negative control**: both tables parsed and are non-empty",
+      len(verbatim) >= 2 and len(adapted) >= 2, f"verbatim={len(verbatim)} adapted={len(adapted)}")
+check("Q0b the two tables are disjoint",
+      not (set(r for r, _ in verbatim) & set(r for r, _, _ in adapted)),
+      "a file claims to be both verbatim and adapted")
+
+for rel, want in verbatim:
+    p2 = REPO / rel
+    if not p2.is_file():
+        check(f"Q1 {rel} exists", False, "listed as verbatim but not present")
         continue
-    got = hashlib.sha256(p.read_bytes()).hexdigest()
-    check(f"Q2 {rel} is byte-identical to its recorded source", got == want,
+    got = hashlib.sha256(p2.read_bytes()).hexdigest()
+    check(f"Q1 {rel} is byte-identical to its recorded source", got == want,
           f"recorded {want[:16]} / actual {got[:16]}")
 
-listed = {rel for rel, _ in rows}
+for rel, src, pub in adapted:
+    p2 = REPO / rel
+    if not p2.is_file():
+        check(f"Q2 {rel} exists", False, "listed as adapted but not present")
+        continue
+    got = hashlib.sha256(p2.read_bytes()).hexdigest()
+    check(f"Q2 {rel} matches its recorded published digest", got == pub,
+          f"recorded {pub[:16]} / actual {got[:16]}")
+    check(f"Q3 {rel} really differs from its source (otherwise 'adapted' is a false claim)",
+          src != pub, "source and published digests are equal")
+
+listed = {r for r, _ in verbatim} | {r for r, _, _ in adapted}
 copied_here = {"scripts/tautological_control_gate.py",
                "scripts/tests/test_tautological_control_gate.py",
                "schema/emit_reason_codes.yaml"}
-check("Q3 the non-Japanese verbatim copies are listed too",
+check("Q4 the non-Japanese copies are listed too",
       copied_here <= listed, str(sorted(copied_here - listed)))
+check("Q5 all seven copies are accounted for", len(listed) == 7, f"{len(listed)} listed")
 
 print("== the provenance anchor is stated consistently ==")
 anchors = set(re.findall(r"\b([0-9a-f]{40})\b", README)) | set(re.findall(r"\b([0-9a-f]{40})\b", JA))

@@ -21,7 +21,7 @@ incierge（器）
 - **unk0（正準状態層）**: 「今の正本は何か」に答える層。canon 承認・staleness 表示・
   観測 repo head の突合。他層から read-only で照会される。
 - **metrology（計測層）**: 計測・学習の層。データ本体は git 外
-  （`metrology/README.md` のデータ配置規約を参照）。
+  （計測層のデータ配置規約を参照）。
 
 ## 依存方向
 

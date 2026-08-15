@@ -233,6 +233,10 @@ declared-empty), which is why §5b forces that to be printed rather than assumed
         {"name": "b1_filed_patent_id", "regex": "\\bpat[\\s\\-_#.:]?\\d{3,}\\b", "example_hit": "PAT-9999", "example_hits": ["\u03c1\u03b1\u03c4-9999", "\u0440\u0430\u0442-9999", "PAT\u20119999", "PAT 9999", "PAT:9999"], "example_miss": "compatibility"},
         {"name": "b2_future_patent_id", "regex": "\\bfp[\\s\\-_#.:]?\\d{3,}\\b"},
         {"name": "b3_objective_id", "regex": "\\bao[\\s\\-_#.:]?\\d{3,}\\b"},
+        {"name": "b12_internal_workitem", "regex": "\\btask[\\-_][a-z0-9]{1,3}\\b", "example_hit": "frozen by TASK-E/F", "example_miss": "the task-list is empty", "_why": "an internal work-item namespace found by an open-world audit, not by the table. A separator is required because a bare space matches ordinary prose (\"task in\")."},
+        {"name": "b13_internal_backlog", "regex": "\\bbl[\\-_]\\d{2,}\\b"},
+        {"name": "b14_internal_signal", "regex": "\\bsig[\\-_]\\d{1,2}\\b"},
+        {"name": "b15_internal_ruling", "regex": "\\bruling[\\-_][a-z0-9][a-z0-9\\-]{1,}\\b"},
         {"name": "b4_applicant_label", "regex": "\\bincierge[\\s\\-_#.:]\\d{3,}\\b", "example_hit": "applicant: Incierge-1001", "example_miss": "github.com/Incierge3789/incierge-oss", "_why_separator_required": "unlike the other three, dropping the separator here collides with the account name Incierge3789, which appears in the README and in config/allowed_remote.txt. Widening it flagged both. The applicant label always carries the hyphen."},
         {"name": "b5_impl_span_shred", "regex": "span[\\s\\-_]*shred"},
         {"name": "b6_impl_span_dag", "regex": "span[\\s\\-_]*dag"},
@@ -518,3 +522,43 @@ two guards are complementary — the path guard decides what may be staged, the
 content guard reads what was staged — and the staged scan (`--staged`, the one
 the hook runs) is unaffected by this change. Negations in `.gitignore` are
 ignored rather than half-implemented, which keeps the file in the population.
+
+### Amendment 5 — 2026-08-15, open-world audit
+
+The four amendments above all came from reviewers pointed **at the pattern
+table**: they were asked to get past the declared classes, and they did. This
+one came from a different question — *what can a stranger infer from the
+publication, given no table at all* — and it found a class the table did not
+have.
+
+`TASK-*` appeared six times in a copied document. It is an internal work-item
+namespace, and the table declared `PAT-`, `FP-`, `AO-` and `Incierge-` because
+those were the identifier schemes I knew to look for. The scanner cannot flag a
+namespace nobody registered, and no amount of adversarial review *against the
+table* would have surfaced it: every reviewer was working inside the same list.
+
+**That is the structural limit of a fail-closed scan, stated plainly.** Declared
+coverage is coverage of what was declared. Four classes are now added, and the
+next unknown namespace will need the same kind of look to find:
+
+| pattern | namespace |
+|---|---|
+| `b12_internal_workitem` | `TASK-*` — a separator is required, because a bare space matches ordinary prose ("task in") |
+| `b13_internal_backlog` | `BL-nnn` |
+| `b14_internal_signal` | `SIG-n` |
+| `b15_internal_ruling` | `RULING-*` |
+
+Adding them immediately found **four more occurrences that four rounds of
+review had walked past**, including two inside the copied gate and its test:
+`RULING_Q5`, `TASK-4` (twice), `BL-011`. All removed.
+
+**What was deliberately not added**: `D-`, `F-`, `NR-`, `PR-`, `XR-` and `ADR-`.
+Those are namespaces this repository **publishes on purpose** — they are its own
+ledger schema and its own architecture decisions. Banning them would make the
+repository fail its own scan, which is the shape of a rule that gets switched
+off rather than obeyed. The distinction is not "internal versus external", it is
+**"private system's namespace versus this repository's namespace"**, and it has
+to be decided per prefix rather than by a shape rule.
+
+Direction: strictly stricter. The full set was re-scanned — 76 patterns, 42
+files, 0 hits, 0 warnings, 0 unscannable.

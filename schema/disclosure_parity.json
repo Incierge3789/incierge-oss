@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "_note": [
+    "Declares the publication paths that must disclose the same content, and the",
+    "exemptions. Read by scripts/tests/test_disclosure_parity.py.",
+    "",
+    "It exists because two paths applied the disclosure line independently and",
+    "diverged: the Japanese copy published thresholds, a sample size and an",
+    "interval width that the curated English ledger had left out. Neither broke a",
+    "rule. Having two readers of the same rule was the defect."
+  ],
+  "pairs": [
+    {
+      "id": "P1",
+      "from": "docs/ja/DISPOSITION.md",
+      "to": "ledger/negative_results.jsonl",
+      "requirement": "every measurement-like number disclosed in `from` is also disclosed in `to`",
+      "measurement_like": "a decimal with two or more fractional digits, or a standalone integer of three or more digits",
+      "direction": "raise `to`, never trim `from` - docs/disclosure.md D1 and D2 say these are public, so cutting them would shrink the disclosure without making the process consistent",
+      "exemptions": [
+        {
+          "value": "213",
+          "why": "a line number in the public Defects4J README, cited as the source of a definition. It is a citation into a third-party public document, not a measurement of this system, so it has nothing to be parity-checked against."
+        }
+      ]
+    }
+  ],
+  "structure_enforced_by_scanner": {
+    "requirement": "the private-structure rule (D5) is enforced by the content scanner, not by this test",
+    "classes": ["b_ip_identifier"],
+    "why": "duplicating the structure patterns here would create the second definition point this whole document exists to prevent. This test asserts only that the scanner declares the classes; the patterns live in docs/prereg.scan.md."
+  }
+}

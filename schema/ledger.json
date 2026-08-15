@@ -33,7 +33,7 @@
         "arms": {"type": "array", "items": "string", "required": true, "min_length": 2},
         "metric": {"type": "string", "required": true, "min_length": 3},
         "metric_definition_point": {"type": "string", "required": true,
-          "_why": "a path. The metric must be defined in exactly one place, or every arm can quietly use its own"},
+          "_why": "the single place the metric is defined. A path when the repository is public; a stable name when it is not, because a path into a private system publishes the structure as well (docs/disclosure.md, D5). What matters is that it names ONE place: when each arm computes its own error, the comparison quietly stops being one"},
         "decision_rule": {"type": "string", "required": true, "min_length": 10},
         "win_conditions": {"type": "array", "items": "string", "required": true, "min_length": 1},
         "stop_conditions": {"type": "array", "items": "string", "required": true, "min_length": 1,

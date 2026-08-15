@@ -1,6 +1,6 @@
 # emit_reason_codes.yaml — 発生時タイピングの**閉じたラベル集合** (P3)
 #
-# doctrine `ops-meta/doctrine/IP_LEARNING_BOUNDARY.md` P3:
+# doctrine (IP learning boundary) P3:
 #   「in-flight 内容は emit 時点で列挙型ラベルに制約する。
 #     中立化の後処理レーンは作らない」
 #

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""恒真の対照を機械検出する gate (測定系 TASK-4 / 4 回目の再発防止)。
+"""恒真の対照を機械検出する gate (測定系 / 4 回目の再発防止)。
 
 ## なぜ在るか
 
@@ -28,7 +28,7 @@ gate は 1 と 2 でのみ block する (近似で止めない)。
 
 `records/tautological_control_exceptions.json` に既存の非準拠を登録する。
 **ratchet は path 集合で比較する** — 件数だけだと入れ替えで穴を維持できる
-(BL-011 の空判定 gate で同じ修理をした)。
+(空判定 gate で同じ修理をした)。
 
 ## F-097
 
@@ -49,8 +49,7 @@ import sys
 REPO = pathlib.Path(__file__).resolve().parent.parent
 EXCEPTIONS = REPO / "records/tautological_control_exceptions.json"
 AUDIT = REPO / "records/tautological_control_audit.json"
-CONTROL_GLOBS = ("scripts/tests/test_*.py", "labs/*/scripts/tests/test_*.py",
-                 "agent-ops/scripts/tests/test_*.py")
+CONTROL_GLOBS = ("scripts/tests/test_*.py",)
 
 
 def control_files(repo: pathlib.Path = REPO) -> list | None:

@@ -171,8 +171,12 @@ cursor).
 
 ## Contributing
 
-Issues, please — see `CONTRIBUTING.md`. Pull requests are closed for now, with
-the reason given each time.
+**Falsifications go to <https://incierge.jp/challenge/>** — that is the canonical
+intake, and what arrives there is projected into the system's event log. GitHub
+Issues are a secondary path that is read but whose projection is not yet built.
+Pull requests are closed for now, with the reason given each time.
+See `CONTRIBUTING.md`, including the part where the claim about external agents
+entering the verification lifecycle is recorded as **falsified**.
 
 ## License
 

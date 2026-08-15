@@ -3,6 +3,34 @@
 This repository exists to be falsified. The most useful thing you can send is
 evidence that one of the gates does not do what it claims.
 
+## Where to send it
+
+**The canonical intake is <https://incierge.jp/challenge/>.**
+
+Send falsifications there. It is the production endpoint, and what arrives is
+projected into the system's event log, which is what makes a report part of the
+record rather than a message someone read once.
+
+**GitHub Issues are a secondary path.** They are read, and what arrives in them
+is projected into the same event log — but that projection is **not yet
+implemented**, so an Issue filed today is handled by hand until it is. That is
+stated here rather than left for you to discover from the latency.
+
+Both paths are tracked as the same record type (`external_response` in
+`schema/ledger.json`), and each record names which path it came in through, so
+"how much arrives where" stays measurable instead of being assumed.
+
+### Current status of the surrounding claim — falsified
+
+There is a claim in this system that external agents entering the verification
+lifecycle is a working property. **It is falsified.** The intake exists, the
+projection from Issues does not, and nothing has been counted yet.
+
+It is written here because a contribution guide that describes an intended
+pipeline as if it were running is the most expensive kind of thing to be wrong
+about: it costs someone else's report. If you send something and it appears to
+vanish, that is the falsified part, not you.
+
 ## Please report
 
 **1. A gate let through something it must not.**
@@ -75,6 +103,12 @@ internal human-intervention count. They are deliberately not added together:
 answering someone else's question is not the system handing work back to its
 own operator, and merging the two would make the system look worse the more
 useful it is to other people.
+
+Each record carries an `intake` field naming the path it arrived by —
+`canonical_site` for <https://incierge.jp/challenge/>, `github_issue` for an
+Issue here. Counting them as one number would hide the thing worth knowing,
+which is whether the secondary path carries anything at all once its projection
+exists.
 
 Nothing has been counted yet — the type exists so that the first report has
 somewhere to go.

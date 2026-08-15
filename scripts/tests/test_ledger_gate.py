@@ -107,6 +107,24 @@ with tempfile.TemporaryDirectory() as tmp:
     check("U4 an empty closed vocabulary is undecidable rather than reject-everything",
           rc == 2, f"rc={rc}")
 
+print("== the external-response instrument distinguishes its intake ==")
+xr = {"id": "XR-001", "ts": "2026-08-15T00:00:00Z", "intake": "canonical_site",
+      "projected_to_event_log": True, "issue_ref": "challenge/2026-08-15/1",
+      "kind": "guard_false_negative", "outcome": "pending", "test_added": None}
+check("I1 a canonical-intake record validates", run([xr], "external_response") == 0)
+secondary = dict(xr, id="XR-002", intake="github_issue",
+                 projected_to_event_log=False, issue_ref="#1")
+check("I2 a secondary-intake record validates, with projection false",
+      run([secondary], "external_response") == 0)
+check("I3 an intake outside the enum is rejected",
+      run([dict(xr, intake="carrier_pigeon")], "external_response") == 1)
+missing = {k: v for k, v in xr.items() if k != "intake"}
+check("I4 **a record that does not say where it came from is rejected**",
+      run([missing], "external_response") == 1)
+no_proj = {k: v for k, v in xr.items() if k != "projected_to_event_log"}
+check("I5 and one that does not say whether it reached the event log is rejected",
+      run([no_proj], "external_response") == 1)
+
 print("== the external-response instrument is defined and separate ==")
 sch = json.loads(SCHEMA.read_text(encoding="utf-8"))
 check("E1 the type exists", "external_response" in sch["types"])

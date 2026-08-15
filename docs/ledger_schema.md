@@ -69,3 +69,14 @@ response is the system answering someone else. Adding them together would mean
 the metric gets worse the more useful the project is to other people, which
 creates a standing incentive to ignore reports — and a metric that rewards
 ignoring evidence is worse than no metric.
+
+It also distinguishes **where the report came in**. `intake` is
+`canonical_site` for <https://incierge.jp/challenge/>, which is the canonical
+endpoint and is projected into the event log, or `github_issue` for an Issue on
+this repository, whose projection **is not yet built**. `projected_to_event_log`
+records that per record rather than leaving it to be remembered, so the value is
+`false` for every Issue until the projection exists — which makes the gap a
+number instead of a footnote.
+
+One combined count would hide the only thing worth measuring here: whether the
+secondary path carries anything at all once it is wired.

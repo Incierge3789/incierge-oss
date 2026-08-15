@@ -74,6 +74,7 @@ repository this was extracted from; for a fork it is a one-line edit.
 | `scripts/scan_forensic.py` | the content scanner. Fail-closed: missing deny-list, unreadable file, or binary content all exit 2 |
 | `scripts/hooks/pre-commit` | content guard. Scans staged content, not the work tree |
 | `scripts/hooks/pre-push` | push guard. Exactly one permitted remote; mismatch, unset and undecidable all reject, and rejections are appended to a log outside the work tree |
+| `scripts/canonical_remote.py` | canonical form of a remote URL, so that the six common spellings of one destination are one destination |
 | `scripts/phase_gate.py` + `schema/phase_transitions.json` | the transition type: nine phases, forward by one, no skipping, unknown names undecidable |
 | `scripts/ledger_gate.py` + `schema/ledger.json` | record schemas for pre-registrations, negative results, decisions, failures. Closed label sets, undeclared fields rejected |
 | `scripts/tautological_control_gate.py` | detects controls that cannot fail. Carried over unchanged from the private system |

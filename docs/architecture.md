@@ -12,11 +12,11 @@ Four gates, one pattern table, two schemas. Everything else is a control.
         --staged    |    |  --all
                     v    v
    scripts/hooks/pre-commit          scripts/hooks/pre-push
-     |  scan_forensic   (content)      |  exactly one permitted remote
-     |  control_selfcheck              |  marker files prove repo identity
-     |  tautological_control_gate      |  rejections appended outside the work tree
-     |  ledger_gate      (schemas)
-     |  phase_gate       (transition definition parses)
+     |  scan_forensic   (content)      |  canonical_remote  (one destination,
+     |  control_selfcheck              |                     six spellings)
+     |  tautological_control_gate      |  deny-list first, then allow-list
+     |  ledger_gate      (schemas)     |  marker files prove repo identity
+     |  phase_gate       (definition)  |  rejections logged outside the work tree
 ```
 
 ## The three-outcome rule

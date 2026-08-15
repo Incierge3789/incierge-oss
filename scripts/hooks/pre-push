@@ -5,9 +5,8 @@
 # git passes: $1 = remote name, $2 = remote URL.
 #
 # Mismatch, unset, and undecidable all reject. There is no "warn and continue"
-# branch, because the failure this guards against is the one where content
-# leaves for the wrong destination, and that is not recoverable by noticing it
-# afterwards.
+# branch, because the failure this guards against is content leaving for the
+# wrong destination, and that is not recoverable by noticing it afterwards.
 set -u
 
 REJECT_LOG_DIR=$(git rev-parse --git-dir 2>/dev/null) || REJECT_LOG_DIR=""
@@ -44,19 +43,46 @@ REMOTE_NAME=${1:-}
 REMOTE_URL=${2:-}
 [ -n "$REMOTE_URL" ] || reject "remote URL not supplied by git (undecidable)"
 
+# --- deny-list ------------------------------------------------------------
+#
+# Checked BEFORE the allow-list, and the allow-list's own value is checked
+# against it too. Ordered the other way round, the deny-list would be
+# unreachable: nothing except the single allowed URL ever gets past the
+# allow-list, so a deny-list entry could only fire on a URL that is
+# simultaneously allowed. The case this ordering actually guards is someone
+# editing config/allowed_remote.txt to point at a forbidden destination.
+#
+# Entries are sha256 digests rather than URLs, so that the guard does not
+# itself publish the destinations it exists to keep private.
+FORBIDDEN_FILE="config/forbidden_remotes.txt"
+[ -f "$FORBIDDEN_FILE" ] || reject "$FORBIDDEN_FILE is missing — cannot decide, so refusing"
+
+PY=${PYTHON:-python3}
+digest_of() {
+    "$PY" -c 'import hashlib,sys;print(hashlib.sha256(sys.argv[1].encode()).hexdigest())' "$1" 2>/dev/null
+}
+D_REMOTE=$(digest_of "$REMOTE_URL")
+D_ALLOWED=$(digest_of "$ALLOWED")
+for d in "$D_REMOTE" "$D_ALLOWED"; do
+    case "$d" in
+        [0-9a-f][0-9a-f]*) ;;
+        *) reject "cannot hash a remote URL (is python3 present?) — cannot decide, so refusing" ;;
+    esac
+done
+
+ENTRIES=0
+while IFS= read -r line; do
+    line=$(printf '%s' "$line" | sed -e 's/#.*//' -e 's/[[:space:]]*//g')
+    [ -n "$line" ] || continue
+    ENTRIES=$((ENTRIES + 1))
+    [ "$D_ALLOWED" = "$line" ] && reject "the allowed remote in $ALLOWED_FILE is itself on the forbidden list"
+    [ "$D_REMOTE" = "$line" ] && reject "remote '$REMOTE_NAME' is on the forbidden list"
+done < "$FORBIDDEN_FILE"
+[ "$ENTRIES" -gt 0 ] || reject "$FORBIDDEN_FILE lists no entries — an empty deny-list is not a checked deny-list"
+
+# --- allow-list -----------------------------------------------------------
 if [ "$REMOTE_URL" != "$ALLOWED" ]; then
     reject "remote '$REMOTE_NAME' is $REMOTE_URL, allowed is $ALLOWED"
-fi
-
-FORBIDDEN_FILE="config/forbidden_remotes.txt"
-if [ -f "$FORBIDDEN_FILE" ]; then
-    while IFS= read -r line; do
-        line=$(printf '%s' "$line" | sed -e 's/#.*//' -e 's/[[:space:]]*$//')
-        [ -n "$line" ] || continue
-        [ "$REMOTE_URL" = "$line" ] && reject "remote $REMOTE_URL is on the forbidden list"
-    done < "$FORBIDDEN_FILE"
-else
-    reject "$FORBIDDEN_FILE is missing — cannot decide, so refusing"
 fi
 
 echo "pre-push: OK ($REMOTE_URL)"

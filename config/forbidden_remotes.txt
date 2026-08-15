@@ -1,7 +1,19 @@
-# Remotes that must never receive a push from this repository, listed
-# explicitly rather than inferred. The first entry is the private repository
-# this publication was derived from: the failure being guarded against is
-# public content and private content arriving at each other's destination.
+# Remotes that must never receive a push from this repository.
 #
-# This file must exist. Its absence is treated as undecidable and rejects.
-https://github.com/Incierge3789/incierge.git
+# Stored as sha256 digests of the exact remote URL string, not as the URLs
+# themselves. Writing the private repository's URL in plain text here would
+# publish, in the guard, one of the things the guard exists to keep unpublished
+# — the same shape of mistake as a deny-list that leaks its own entries.
+# Cross-review (agy, P1, 2026-08-15) caught the plaintext version.
+#
+# The digest still does the job: hooks/pre-push hashes the remote URL git hands
+# it and compares. It cannot be reversed into the URL by a reader.
+#
+# This file must exist and must be non-empty. Absence, an unreadable file, or
+# no usable entries are all treated as undecidable and reject the push.
+#
+# Add an entry with:
+#   python3 -c 'import hashlib,sys;print(hashlib.sha256(sys.argv[1].encode()).hexdigest())' <url>
+
+# the private repository this publication was extracted from
+327e48d9db67315a93c0a8c09099336990b1078b8780bb20673c157e7646629b

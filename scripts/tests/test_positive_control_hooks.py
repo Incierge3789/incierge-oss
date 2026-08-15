@@ -14,10 +14,14 @@ Content guard (scripts/hooks/pre-commit):
 Push guard (scripts/hooks/pre-push):
   E. the one allowed remote is accepted
   F. any other remote is rejected
-  G. a remote on the forbidden list is rejected
+  G. a remote on the deny-list is rejected, **and the deny-list is what
+     rejected it** — ordered after the allow-list it would be unreachable, and
+     this case would pass anyway
   H. no remote supplied at all is rejected (undecidable, not permitted)
   I. hooks outside their own repository reject (marker file removed)
-  J. rejections are appended to a log that lives outside the work tree
+  J. rejections are appended to a log outside the work tree, and the one
+     acceptance is not logged
+  K. an allow-list edited to point at a deny-listed destination is rejected
 
 The payloads are never written into this file. They are read from the single
 definition point (docs/prereg.scan.md and the literal list), so that narrowing a
@@ -25,6 +29,7 @@ pattern is caught here rather than silently making the control a no-op.
 """
 from __future__ import annotations
 
+import hashlib
 import os
 import pathlib
 import shutil
@@ -83,7 +88,23 @@ def run_hook(hook: str, cwd: pathlib.Path, tmp: str, args=()) -> subprocess.Comp
                           capture_output=True, text=True, timeout=300)
 
 
-ALLOWED = "https://github.com/Incierge3789/incierge-oss.git"
+def first_entry(path: pathlib.Path) -> str:
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.split("#", 1)[0].strip()
+        if line:
+            return line
+    raise AssertionError(f"{path} declares nothing")
+
+
+def sha256(s: str) -> str:
+    return hashlib.sha256(s.encode()).hexdigest()
+
+
+# Read from the configuration rather than repeating it. Cross-review (agy, P1)
+# found this hard-coded here, which is the same single-definition-point break
+# the repository asserts it does not have.
+ALLOWED = first_entry(REPO / "config/allowed_remote.txt")
+FORBIDDEN_FILE = "config/forbidden_remotes.txt"
 
 print("== A/B/C/D. content guard ==")
 with tempfile.TemporaryDirectory() as tmp:
@@ -103,8 +124,12 @@ with tempfile.TemporaryDirectory() as tmp:
     hit = run_hook("pre-commit", box, tmp)
     check("A1 **positive**: a payload per class -> rejected",
           hit.returncode != 0, f"rc={hit.returncode}")
+    # Match the scanner's own HIT line, not the bare class name. Cross-review
+    # (cursor, P1) showed that a broken class still leaves its name in stderr
+    # via the self-check's failure message, so `cid in stderr` would stay green
+    # while the class matched nothing.
     for cid in REQUIRED_CLASSES:
-        check(f"A2 rejection names {cid}", cid in hit.stderr,
+        check(f"A2 a scan HIT is reported for {cid}", f"[{cid}/" in hit.stderr,
               hit.stderr[-500:])
     check("A3 the two runs actually differ (the control is not tautological)",
           clean.returncode != hit.returncode,
@@ -145,11 +170,31 @@ with tempfile.TemporaryDirectory() as tmp:
                      ["origin", "https://github.com/someone/else.git"])
     check("F1 any other remote is rejected", other.returncode != 0, other.stdout[-200:])
 
-    forbidden_url = [l.strip() for l in
-                     (box / "config/forbidden_remotes.txt").read_text(encoding="utf-8").splitlines()
-                     if l.strip() and not l.startswith("#")][0]
-    forb = run_hook("pre-push", box, tmp, ["origin", forbidden_url])
-    check("G1 a forbidden remote is rejected", forb.returncode != 0, forb.stdout[-200:])
+    # The deny-list holds digests, so the control supplies its own entry rather
+    # than trying to recover a URL from one. It also asserts *which* rule
+    # fired: with the deny-list checked after the allow-list it would be
+    # unreachable, and this case would still "pass" — rejected by the
+    # allow-list, while the deny-list did nothing.
+    fpath = box / FORBIDDEN_FILE
+    shipped = [l.split("#", 1)[0].strip() for l in
+               fpath.read_text(encoding="utf-8").splitlines()]
+    check("G0 the shipped deny-list is not empty",
+          len([s for s in shipped if s]) > 0, "an empty deny-list is not a checked deny-list")
+    test_url = "https://github.com/forbidden-destination/for-control.git"
+    with fpath.open("a", encoding="utf-8") as fh:
+        fh.write(sha256(test_url) + "\n")
+    forb = run_hook("pre-push", box, tmp, ["origin", test_url])
+    check("G1 a remote on the deny-list is rejected", forb.returncode != 0, forb.stdout[-200:])
+    check("G2 and the deny-list is what rejected it, not the allow-list",
+          "forbidden list" in forb.stderr, forb.stderr[-200:])
+
+    # the allow-list's own value is checked against the deny-list
+    (box / "config/allowed_remote.txt").write_text(test_url + "\n", encoding="utf-8")
+    selfforb = run_hook("pre-push", box, tmp, ["origin", test_url])
+    check("K1 an allowed remote that is on the deny-list is rejected",
+          selfforb.returncode != 0 and "itself on the forbidden list" in selfforb.stderr,
+          selfforb.stderr[-200:])
+    (box / "config/allowed_remote.txt").write_text(ALLOWED + "\n", encoding="utf-8")
 
     none = run_hook("pre-push", box, tmp)
     check("H1 no remote supplied -> rejected as undecidable", none.returncode != 0,
@@ -161,7 +206,9 @@ with tempfile.TemporaryDirectory() as tmp:
     check("J1 rejections are logged outside the work tree", log.is_file(), str(log))
     if log.is_file():
         lines = [l for l in log.read_text(encoding="utf-8").splitlines() if l.strip()]
-        check("J2 one line per rejection so far", len(lines) == 3, f"{len(lines)} lines")
+        # F1, G1, K1, H1 rejected; E1 was accepted and must not be logged
+        check("J2 one line per rejection and none for the acceptance",
+              len(lines) == 4, f"{len(lines)} lines: {lines}")
 
     (box / "config/allowed_remote.txt").unlink()
     stray = run_hook("pre-push", box, tmp, ["origin", ALLOWED])

@@ -87,7 +87,7 @@ print("== the definition is not duplicated ==")
 probe = [n for n in names if " " in n][0]
 copies = [p.relative_to(REPO).as_posix() for p in sorted(REPO.rglob("*"))
           if p.is_file() and ".git" not in p.parts and p != DEF
-          and p.suffix in (".json", ".py")
+          and p.suffix in (".json", ".py", ".md", ".txt", ".yaml")
           and probe in p.read_text(encoding="utf-8", errors="replace")]
 check("D1 the phase list exists in exactly one machine-readable place",
       copies == [], str(copies))

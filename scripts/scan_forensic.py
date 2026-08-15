@@ -48,9 +48,29 @@ class Undecidable(Exception):
 # normalization
 # --------------------------------------------------------------------------
 
+# Declared confusable folding, prereg.scan.md §2 step 5. Cross-review (cursor,
+# P0, 2026-08-15) got a literal past the scanner by spelling it with a Cyrillic
+# character that renders identically. This is the common half of that attack;
+# it is NOT the full Unicode confusables table, and §2 says so.
+CONFUSABLES = str.maketrans({
+    "а": "a", "е": "e", "о": "o", "р": "p", "с": "c",
+    "у": "y", "х": "x", "і": "i", "ј": "j", "ѕ": "s",
+    "ԁ": "d", "ԛ": "q", "ԝ": "w", "һ": "h", "т": "t",
+    "ο": "o", "α": "a", "ε": "e", "ρ": "p", "ι": "i",
+    "κ": "k", "τ": "t", "υ": "u", "χ": "x", "ν": "v",
+})
+
+
 def normalize(text: str) -> str:
-    """NFKC + casefold, exactly as declared in prereg.scan.md §2."""
-    return unicodedata.normalize("NFKC", text).casefold()
+    """The normalization declared in prereg.scan.md §2.
+
+    NFKC, then drop format and combining characters, then casefold, then fold
+    declared confusables. The middle step is what stops a zero-width space or a
+    soft hyphen from being inserted into the middle of a withheld word.
+    """
+    t = unicodedata.normalize("NFKC", text)
+    t = "".join(ch for ch in t if unicodedata.category(ch) not in ("Cf", "Mn"))
+    return t.casefold().translate(CONFUSABLES)
 
 
 def _literal_to_regex(literal: str) -> str:
@@ -229,30 +249,42 @@ def _record(p, path, lineno, m):
 
 
 def scan_path_name(rel: str, patterns: list) -> list:
-    """Path patterns match the relative path itself, not the file contents."""
-    norm = normalize(rel)
-    return [_record(p, rel, 0, m)
-            for p in patterns if p.target == "path"
-            for m in p.rx.finditer(norm)]
+    """Match against the relative path itself, with **every** pattern.
+
+    Cross-review (cursor, P0, 2026-08-15) pointed out that a file called
+    `people/<withheld name>.txt` with innocuous contents used to pass: only the
+    one declared path pattern was applied to paths, so a filename was a place
+    to put withheld material where nothing looked. A path is content.
+    """
+    return _match_line(normalize(rel), patterns, rel, 0)
+
+
+def _match_line(line: str, patterns: list, path: str, lineno: int) -> list:
+    """Apply patterns to one normalized line, honouring the declared exclusions.
+
+    Shared by the path scan and the content scan on purpose: an exclusion that
+    applied to file contents but not to file names would be two rules wearing
+    one name.
+    """
+    hits = []
+    for p in patterns:
+        for m in p.rx.finditer(line):
+            if p.excl_g1 is not None and m.lastindex:
+                if p.excl_g1.match(m.group(1) or ""):
+                    continue
+            if p.excl_compounds and _suppressed_by_compound(line, m.span(), p.excl_compounds):
+                continue
+            hits.append(_record(p, path, lineno, m))
+    return hits
 
 
 def scan_text(text: str, patterns: list, path: str) -> list:
+    content = [p for p in patterns if p.target == "content"]
     hits = []
     for lineno, raw in enumerate(text.splitlines(), 1):
         line = normalize(raw)
-        if not line:
-            continue
-        for p in patterns:
-            if p.target != "content":
-                continue
-            for m in p.rx.finditer(line):
-                if p.excl_g1 is not None and m.lastindex:
-                    g1 = m.group(1) or ""
-                    if p.excl_g1.match(g1):
-                        continue
-                if p.excl_compounds and _suppressed_by_compound(line, m.span(), p.excl_compounds):
-                    continue
-                hits.append(_record(p, path, lineno, m))
+        if line:
+            hits.extend(_match_line(line, content, path, lineno))
     return hits
 
 

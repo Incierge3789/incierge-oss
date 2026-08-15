@@ -56,6 +56,7 @@ everything.
 | `verdict` | from a closed set: `refuted`, `not_supported`, `withdrawn`, `substrate_unfit`, `inconclusive`. These are not synonyms — `refuted` means the measurement went against the claim, `not_supported` means it did not go for it, and `withdrawn` means something previously asserted is being taken back |
 | `withdrawn_claim` | the retracted wording, verbatim. Nullable, because most negative results never had a positive phase — but when there was one, the exact sentence being taken back is recorded rather than paraphrased |
 | `reopen_condition` | either the evidence that would reopen this, or an explicit statement that nothing will. A negative result with no reopen condition is indistinguishable from one that was abandoned |
+| `source` | **a path inside the private repository at the anchor commit, which does not resolve in this repository.** It is a provenance pointer, not a link. The measurement records themselves are not published; what is published is the claim, the registered criteria, the numbers, and the verdict |
 
 ## `external_response` is a separate instrument
 

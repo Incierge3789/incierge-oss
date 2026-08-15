@@ -32,14 +32,37 @@ Applied to every line before matching:
 
 1. Unicode `NFKC` normalization — full-width and half-width forms become the
    same string, so `ＡＥＧＩＳ` and `AEGIS` cannot be distinguished by the writer.
-2. `str.casefold()` — case is ignored.
-3. Literal patterns additionally undergo **separator expansion**: any `-`, `_`,
+2. **Format and combining characters are dropped** (Unicode categories `Cf` and
+   `Mn`). A zero-width space, a zero-width joiner, a soft hyphen or a byte-order
+   mark inserted into the middle of a withheld word makes it render identically
+   and match nothing; removing them first closes that.
+3. `str.casefold()` — case is ignored.
+4. **Declared confusables are folded** — a fixed table of Cyrillic and Greek
+   characters that render as Latin ones (`а е о р с у х і ј ѕ`, `ο α ε ρ ι`, and
+   a few more) is mapped to Latin. The table is in `scripts/scan_forensic.py`
+   as `CONFUSABLES`.
+5. Literal patterns additionally undergo **separator expansion**: any `-`, `_`,
    or space inside a declared literal is compiled to `[\s\-_]*`, so a literal
    written as `acme-tek` matches `acmetek`, `acme tek`, `acme_tek`, `acme-tek`,
    and `AcmeTek`.
 
-Byte-identical files can therefore not evade the scan by re-casing, re-spacing,
-or switching to full-width characters.
+A file can therefore not evade the scan by re-casing, re-spacing, switching to
+full-width characters, or inserting invisible characters.
+
+**Known limit on step 4.** The confusable table is the common half of the
+attack, not the full Unicode confusables set. A determined writer can still find
+a lookalike codepoint outside it — Cherokee and Canadian Aboriginal syllabics
+both contain Latin-shaped characters. Closing that properly needs a confusables
+data file this scanner deliberately does not carry. Stated here rather than
+implied by silence.
+
+## 2b. The path is scanned too
+
+Every fail-severity pattern is applied to the **relative path** as well as to
+the file contents. A withheld name in a filename with innocuous contents used to
+pass, because only one declared pattern looked at paths. The same exclusions
+apply in both places, so a rule cannot mean one thing about contents and another
+about names.
 
 ## 3. Exclusions (pattern-level only)
 
@@ -135,7 +158,7 @@ is mapped to the pattern that actually fires:
 | customer names | `c_customer_literal` (literals) + `c7_*` company and honorific markers |
 | deals | `c10_deal_vocabulary` |
 | person names | `d_person_shape` (honorific shape) + `d_person_literal` (literals) |
-| monetary amounts | `c8_monetary_amount` |
+| monetary amounts | `c8_monetary_amount_*` (symbol, ISO code, grouped, plain, cents) |
 | business documents | `c9_business_document` |
 | product codes proper | `b_ip_identifier` + `a_proper_noun` (literals) |
 
@@ -157,7 +180,6 @@ declared-empty), which is why §5b forces that to be printed rather than assumed
     "config/literals.json",
     "config/literals.example.json"
   ],
-  "literal_classes": ["a_proper_noun", "d_person_literal"],
   "classes": [
     {
       "id": "a_proper_noun",
@@ -170,10 +192,10 @@ declared-empty), which is why §5b forces that to be printed rather than assumed
       "title": "(b) IP identifiers and their implementation names",
       "source": "inline",
       "patterns": [
-        {"name": "b1_filed_patent_id", "regex": "\\bpat-\\d{3}\\b"},
-        {"name": "b2_future_patent_id", "regex": "\\bfp-\\d{3}\\b"},
-        {"name": "b3_objective_id", "regex": "\\bao-\\d{3}\\b"},
-        {"name": "b4_applicant_label", "regex": "\\bincierge-\\d{3}\\b"},
+        {"name": "b1_filed_patent_id", "regex": "\\bpat[\\-_]?\\d{3,}\\b", "example_hit": "PAT-9999", "example_miss": "compatibility"},
+        {"name": "b2_future_patent_id", "regex": "\\bfp[\\-_]?\\d{3,}\\b"},
+        {"name": "b3_objective_id", "regex": "\\bao[\\-_]?\\d{3,}\\b"},
+        {"name": "b4_applicant_label", "regex": "\\bincierge[\\-_]\\d{3,}\\b", "example_hit": "applicant: Incierge-1001", "example_miss": "github.com/Incierge3789/incierge-oss", "_why_separator_required": "unlike the other three, dropping the separator here collides with the account name Incierge3789, which appears in the README and in config/allowed_remote.txt. Widening it flagged both. The applicant label always carries the hyphen."},
         {"name": "b5_impl_span_shred", "regex": "span[\\s\\-_]*shred"},
         {"name": "b6_impl_span_dag", "regex": "span[\\s\\-_]*dag"},
         {"name": "b7_impl_dag_audit", "regex": "dag[\\s\\-_]*audit"},
@@ -192,7 +214,7 @@ declared-empty), which is why §5b forces that to be printed rather than assumed
         {"name": "c1_private_key_block", "regex": "-----begin (?:[a-z0-9 ]+ )?private key-----"},
         {"name": "c2_github_pat", "regex": "\\bghp_[a-z0-9]{36}\\b"},
         {"name": "c2_github_fine_grained", "regex": "\\bgithub_pat_[a-z0-9_]{22,}"},
-        {"name": "c2_openai_key", "regex": "\\bsk-[a-z0-9]{20,}"},
+        {"name": "c2_openai_key", "regex": "\\bsk-[a-z0-9_-]{20,}", "example_hit": "sk-proj-abc123def456ghi789jkl012mno345pqr678", "example_miss": "sk-short"},
         {"name": "c2_anthropic_key", "regex": "\\bsk-ant-[a-z0-9\\-_]{20,}"},
         {"name": "c2_aws_access_key", "regex": "\\b(?:akia|asia)[0-9a-z]{16}\\b"},
         {"name": "c2_slack_token", "regex": "\\bxox[baprs]-[a-z0-9-]{10,}"},
@@ -201,8 +223,8 @@ declared-empty), which is why §5b forces that to be printed rather than assumed
         {
           "name": "c3_assigned_credential",
           "regex": "(?:api[_-]?key|secret|token|password|passwd|passphrase|credential|private[_-]?key)\\s*[:=]\\s*[\"']([^\"'\\n]{8,})[\"']",
-          "exclude_if_group1_matches": "^(?:<[^>]*>|\\$\\{[^}]*\\}|\\$[a-z_][a-z0-9_]*|x{3,}|\\*{3,}|\\.{3,}|changeme|change_me|placeholder|redacted|example[a-z0-9_-]*|dummy|sample|fake|test[a-z0-9_-]*|your[_-].*|null|none|true|false|\\d+|os\\.environ.*|process\\.env.*|secrets\\..*|env\\[.*)$",
-          "example_hit": "api_key = \"s3cr3t-value-not-a-placeholder\"",
+          "exclude_if_group1_matches": "^(?:<[^>]*>|\\$\\{[^}]*\\}|\\$[a-z_][a-z0-9_]*|x{3,}|\\*{3,}|\\.{3,}|changeme|change[_-]me|placeholder|redacted|example|example[_-]key|dummy|sample|fake|test|testing|test[_-]key|your[_-](?:api[_-])?(?:key|token|secret|password)(?:[_-]here)?|null|none|true|false|\\d+|os\\.environ.*|process\\.env.*|secrets\\..*|env\\[.*)$",
+          "example_hit": "password = \"example_hunter2_production\"",
           "example_miss": "api_key = \"${SOME_ENV_VAR}\""
         },
         {
@@ -216,7 +238,7 @@ declared-empty), which is why §5b forces that to be printed rather than assumed
         {"name": "c5_internal_tld", "regex": "\\bhttps?://[a-z0-9.-]+\\.(?:internal|intranet|lan|corp|local)\\b"},
         {"name": "c5_service_account", "regex": "[a-z0-9-]+@[a-z0-9-]+\\.iam\\.gserviceaccount\\.com"},
         {"name": "c5_tunnel_host", "regex": "\\b[a-z0-9-]+\\.(?:ngrok\\.io|ngrok-free\\.app|ts\\.net)\\b"},
-        {"name": "c6_local_user_path_unix", "regex": "(?:/users|/home)/[a-z0-9._-]+/"},
+        {"name": "c6_local_user_path_unix", "regex": "(?:/users|/home)/[a-z0-9._-]+", "example_hit": "export USER_HOME=/Users/alice", "example_miss": "see the /home directory"},
         {"name": "c6_local_user_path_win", "regex": "c:\\\\users\\\\[a-z0-9._-]+"},
         {"name": "c7_ja_company_suffix", "regex": "株式会社|合同会社|有限会社|（株）|\\(株\\)"},
         {"name": "c7_ja_customer_honorific", "regex": "御中|貴社"},
@@ -225,6 +247,8 @@ declared-empty), which is why §5b forces that to be printed rather than assumed
         {"name": "c8_monetary_amount_jpy_word", "regex": "\\d[\\d,]*\\s?(?:円|万円|億円)"},
         {"name": "c8_monetary_amount_iso", "regex": "\\b(?:jpy|usd|eur|gbp)\\s?\\d[\\d,]*"},
         {"name": "c8_monetary_amount_grouped", "regex": "\\$\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?"},
+        {"name": "c8_monetary_amount_plain", "regex": "\\$\\s?\\d{3,}(?:\\.\\d+)?\\b", "example_hit": "server_cost: $1200", "example_miss": "use $1 for the first argument"},
+        {"name": "c8_monetary_amount_cents", "regex": "\\$\\s?\\d+\\.\\d{2}\\b"},
         {"name": "c8_monetary_amount_scaled", "regex": "\\$\\d+(?:\\.\\d+)?\\s?(?:million|billion|trillion|[mbk])\\b"},
         {"name": "c9_business_document", "regex": "見積書|請求書|契約書|提案書|議事録|稟議|発注書|納品書|覚書|基本合意|秘密保持契約|\\bnda\\b"},
         {"name": "c10_deal_vocabulary", "regex": "商談|受注|失注|与信|見込み客|取引先"}
@@ -244,12 +268,19 @@ declared-empty), which is why §5b forces that to be printed rather than assumed
       "patterns": [
         {
           "name": "d1_ja_honorific",
-          "regex": "([\\u4e00-\\u9fff\\u3005]{1,4})(?:さん|氏|社長|部長|課長|専務|取締役|殿)",
-          "exclude_if_group1_matches": "^(?:氏|摂|華|姓|某|同|両|彼|当|本|各|全|副|次|部|課|会|社|支|支店|代表)$",
+          "regex": "([\\u4e00-\\u9fff\\u3005]{1,4})(?:さん|氏|様|社長|部長|課長|専務|取締役|殿)",
+          "exclude_if_group1_matches": "^(?:氏|摂|華|姓|某|同|両|彼|当|本|各|全|副|次|部|課|会|社|支|支店|代表|仕|多|一|異|模|様|神|王|奥|坊|文|同)$",
           "example_hit": "山田さん",
           "example_miss": "摂氏"
+        },
+        {
+          "name": "d2_katakana_honorific",
+          "regex": "([\\u30a1-\\u30fa\\u30fc]{2,8})(?:さん|氏|様|社長|部長|課長|専務|取締役|殿)",
+          "example_hit": "担当はアリスさんです",
+          "example_miss": "カタカナ"
         }
       ],
+      "known_limit": "A hiragana-only given name before an honorific is NOT detected, and this is a decision rather than an oversight. Hiragana is the script ordinary prose is written in, so a hiragana prefix class would absorb preceding text: in 'ここにたくさんある' a greedy prefix yields the match 'ここにたく' + 'さん'. Per-word exclusions cannot fix that, because the prefix is not the word. Kanji and katakana prefixes carry no such ambiguity and are matched. What remains uncovered: a person referred to only by a hiragana name.",
       "positive_control": "山田さん"
     },
     {

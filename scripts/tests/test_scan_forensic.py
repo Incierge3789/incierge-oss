@@ -52,6 +52,26 @@ check("N4 separators expand (space / hyphen / underscore)",
       all(len(hits(lit.replace("-", sep), "a_proper_noun")) > 0 for sep in (" ", "-", "_", "")))
 check("N5 **negative**: an unrelated word does not match",
       len(hits("ordinary prose about widgets", "a_proper_noun")) == 0)
+# cross-review (cursor, P0): invisible characters and lookalike codepoints
+zw = base[:2] + "​" + base[2:]
+check("N6 a zero-width space inside the literal does not hide it",
+      len(hits(zw, "a_proper_noun")) > 0, repr(zw))
+soft = base[:2] + "­" + base[2:]
+check("N7 a soft hyphen inside the literal does not hide it",
+      len(hits(soft, "a_proper_noun")) > 0, repr(soft))
+cyr = base.replace("e", "е", 1) if "e" in base else base.replace("a", "а", 1)
+check("N8 a Cyrillic lookalike character does not hide it",
+      len(hits(cyr, "a_proper_noun")) > 0, repr(cyr))
+
+print("== the path is scanned, not just the contents ==")
+for cls, payload in sorted(S.positive_controls(prereg, lits).items()):
+    if cls == "e_third_party_oss":
+        continue
+    got = S.scan_path_name(f"notes/{payload}.txt", PATTERNS)
+    check(f"PP1 {cls} is caught in a file name", any(h["class"] == cls for h in got),
+          f"notes/{payload}.txt")
+check("PP2 **negative**: an ordinary path is not flagged",
+      S.scan_path_name("docs/architecture.md", PATTERNS) == [])
 
 print("== exclusions are pattern-level, and still let the bare literal through ==")
 compounded = [e for e in lits.get("d_person_literal", {}).get("literals", [])
@@ -73,10 +93,20 @@ else:
 # must keep apart. They are read from the table, never written here: a copy in
 # this file would go stale exactly when the rule was edited, which is the only
 # moment this check matters.
-paired = [(c["id"], p) for c in prereg["classes"] if c.get("source") == "inline"
-          for p in c.get("patterns") or [] if "exclude_if_group1_matches" in p]
+inline = [(c["id"], p) for c in prereg["classes"] if c.get("source") == "inline"
+          for p in c.get("patterns") or []]
+# Two populations, and the difference matters. Every pattern carrying an
+# exclusion MUST declare both cases, because an exclusion is where a guard gets
+# widened until it excuses everything. Any other pattern MAY declare them, and
+# several do — those are the ones a cross-review found holes in, so the case
+# that closed the hole is stored next to the pattern rather than in a report.
+must = [(cid, p) for cid, p in inline if "exclude_if_group1_matches" in p]
+paired = [(cid, p) for cid, p in inline if "example_hit" in p or "example_miss" in p]
 check("X0 every exclusion-bearing pattern declares both example cases",
-      len(paired) > 0 and all("example_hit" in p and "example_miss" in p for _, p in paired),
+      len(must) > 0 and all("example_hit" in p and "example_miss" in p for _, p in must),
+      str([p["name"] for _, p in must if "example_hit" not in p or "example_miss" not in p]))
+check("X0b every declared pair is complete",
+      all("example_hit" in p and "example_miss" in p for _, p in paired),
       str([p["name"] for _, p in paired if "example_hit" not in p or "example_miss" not in p]))
 for cid, p in paired:
     own = [q for q in PATTERNS if q.name == p["name"]]
@@ -123,8 +153,11 @@ with tempfile.TemporaryDirectory() as tmp:
 print("== the pattern table is not duplicated ==")
 # Probes are taken from the table itself. Writing them out here would make this
 # file a copy of what it is looking for.
-probes = [c["patterns"][0]["regex"] for c in prereg["classes"]
-          if c.get("source") == "inline" and c.get("patterns")]
+# Every regex, not just the first of each class: cross-review (cursor, P2)
+# pointed out that a copy of any later pattern would have gone undetected.
+probes = [spec["regex"] for c in prereg["classes"]
+          for key in ("patterns", "path_patterns")
+          for spec in c.get(key) or []]
 copies = []
 for p in sorted(REPO.rglob("*")):
     if not p.is_file() or ".git" in p.parts or p == PREREG:
@@ -149,18 +182,22 @@ check("D2 **negative control**: the probes are present in the table itself",
       f"{len(probes)} probes, missing={[pr for pr in probes if escaped(pr) not in raw]}")
 
 print("== the scan covers the population it claims to ==")
-tracked = subprocess.run(["git", "-C", str(REPO), "ls-files"],
-                         capture_output=True, text=True)
-if tracked.returncode == 0 and tracked.stdout.strip():
-    files = [f for f in tracked.stdout.splitlines() if f]
-    res = S.scan_paths(REPO, files, prereg, PATTERNS)
-    covered = len(res["scanned"]) + len(res["skipped_by_pattern_table"]) + len(res["unscannable"])
-    check("C1 every tracked file is accounted for", covered == len(files),
-          f"{covered} of {len(files)}")
-    check("C2 the repository itself is clean", res["hits"] == [],
-          json.dumps(res["hits"][:3], ensure_ascii=False))
-else:
-    print("  SKIP repository is not yet a git work tree with tracked files")
+# There is no skip branch here. Cross-review (agy, P1) found the earlier version
+# printing SKIP and exiting 0 when .git was absent — from a release tarball, the
+# suite would have reported success without ever scanning the repository, which
+# is the exact reading ("could not check" as "checked and clean") that the rest
+# of this codebase refuses. S.all_paths falls back to the filesystem and says
+# which population it used.
+files, population = S.all_paths(REPO)
+check("C0 the population is non-empty", len(files) > 0, f"{population}: {len(files)}")
+res = S.scan_paths(REPO, files, prereg, PATTERNS)
+covered = len(res["scanned"]) + len(res["skipped_by_pattern_table"]) + len(res["unscannable"])
+check(f"C1 every file in the {population} population is accounted for",
+      covered == len(files), f"{covered} of {len(files)}")
+check("C2 the repository itself is clean", res["hits"] == [],
+      json.dumps(res["hits"][:3], ensure_ascii=False))
+check("C3 nothing in it was unreadable", res["unscannable"] == [],
+      json.dumps(res["unscannable"][:3], ensure_ascii=False))
 
 print(f"\nscan-forensic: FAIL {len(FAILED)}")
 sys.exit(1 if FAILED else 0)

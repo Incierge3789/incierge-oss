@@ -9,7 +9,12 @@ set -u
 cd "$(dirname "$0")/../.." || exit 1
 PY=${PYTHON:-python3}
 TMP=$(mktemp -d) || exit 1
-trap 'rm -rf "$TMP"' EXIT
+PLANTED=./_demo_planted.txt
+# Step 2 plants payloads in the repository root on purpose. If the run is
+# interrupted between planting and removal, that file stays and every later
+# commit is rejected by the content guard — correct behaviour, baffling cause.
+# Cleaning up on INT and TERM as well as EXIT is what makes it not happen.
+trap 'rm -rf "$TMP" "$PLANTED"' EXIT INT TERM
 fail=0
 
 hr() { printf '\n== %s ==\n' "$1"; }
@@ -43,12 +48,12 @@ lits = S.load_literals(pathlib.Path("config/literals.json"))
 for cid, payload in sorted(S.positive_controls(prereg, lits).items()):
     print(f"{cid}: {payload}")
 PY
-cp "$TMP/planted.txt" ./_demo_planted.txt
-$PY scripts/scan_forensic.py --paths _demo_planted.txt >/dev/null 2>"$TMP/hits.err"
+cp "$TMP/planted.txt" "$PLANTED"
+$PY scripts/scan_forensic.py --paths "$(basename "$PLANTED")" >/dev/null 2>"$TMP/hits.err"
 expect 1 $? "scan of a file carrying one payload per class"
 grep -c '^HIT' "$TMP/hits.err" | sed 's/^/   hits: /'
 grep -c '^WARN' "$TMP/hits.err" | sed 's/^/   warnings: /'
-rm -f ./_demo_planted.txt
+rm -f "$PLANTED"
 
 hr "3. positive controls must still match their own class"
 $PY scripts/control_selfcheck.py

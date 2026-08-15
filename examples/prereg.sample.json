@@ -1,0 +1,28 @@
+{
+  "id": "PR-001",
+  "registered": "2026-08-11",
+  "question": "At an equal measurement budget N, does the choice of which channels to measure change the estimation error?",
+  "claim": "Information-gain (D-optimal) selection beats uniform spacing at equal N.",
+  "arms": [
+    "A_random: draw N channels uniformly at random without replacement; the draw is derived from the seed so it is reproducible",
+    "B_uniform: place N channels at equal spacing across the available range",
+    "C_infogain: greedy D-optimal; add the channel that most reduces the log-determinant of the posterior covariance, using only the reference model and the design regularisation, never the observations"
+  ],
+  "metric": "RMSE(estimate, truth) / mean(truth)",
+  "metric_definition_point": "scripts/scoring.py :: err()",
+  "decision_rule": "Paired per seed: d_s = err_C(s) - err_B(s). Bootstrap the mean of d_s over 10000 resamples of the seeds with the rng seed fixed here, and take the 2.5/97.5 percentiles as a 95% CI. Run-to-run variability is the median of the three per-arm seed-wise MADs. Only C against B is judged; A is plotted and never scored.",
+  "win_conditions": [
+    "the bootstrap 95% CI of the mean of d_s does not cross zero",
+    "AND |median(d_s)| exceeds run-to-run variability"
+  ],
+  "stop_conditions": [
+    "any budget has missing trials: do not score, report the gap",
+    "at N equal to the full channel count the arms must agree, because every arm then uses every channel; if they disagree the harness is wrong and nothing is scored",
+    "if only one of the two win conditions holds, the verdict is 'no difference'; a near miss is not reread as a win"
+  ],
+  "controls": [
+    "A_random is carried through the whole run so that the two designed arms are visible against an undesigned one",
+    "the full-budget agreement check above is a control on the harness, not on the claim"
+  ],
+  "negative_result_is_a_result": true
+}

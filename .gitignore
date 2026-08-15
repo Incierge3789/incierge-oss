@@ -1,0 +1,32 @@
+# Path guard.
+#
+# This file does one job: it names, as globs, the places where non-public
+# layers are allowed to exist on a working machine, so that they cannot be
+# staged by accident. It is not a substitute for the content guard in
+# hooks/pre-commit — a path guard only knows where a file is, not what is in
+# it, and material arrives in the wrong directory routinely.
+
+# --- the real literal deny-list: never publishable, by construction ---
+config/literals.json
+config/*.local.json
+
+# --- non-public layers (boundary rule: measured values are public, raw logs
+#     are private, and calibration values are private even though they are
+#     measured values) ---
+/calibration/
+/operational/
+/raw-logs/
+/live-ledger/
+/corpus/
+/private/
+/transcripts/
+*.local.*
+
+# --- working artifacts ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.DS_Store

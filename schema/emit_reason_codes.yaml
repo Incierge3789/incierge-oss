@@ -1,0 +1,91 @@
+# emit_reason_codes.yaml — 発生時タイピングの**閉じたラベル集合** (P3)
+#
+# doctrine `ops-meta/doctrine/IP_LEARNING_BOUNDARY.md` P3:
+#   「in-flight 内容は emit 時点で列挙型ラベルに制約する。
+#     中立化の後処理レーンは作らない」
+#
+# **ここに無いラベルは emit できない。** 自由記述を書く経路を構造的に持たせない。
+# ラベルは**構造**なので repo に置いてよい (実識別子ではない)。
+#
+# 2026-08-02 実測で P3 の対象は 31 file / 3,033 件。上位欄:
+#   payload_summary 1009 / analysis.tail 750 / candidates.raw_evidence 394 /
+#   reason 306 / cause 198 / failures.reason 158
+
+version: 1
+
+# 介入・差し戻し・停止の理由 (approval_question_block ほか)
+intervention:
+  - awaiting_ruling          # 裁定待ちを提示した
+  - option_presented         # 選択肢を提示した
+  - confirmation_requested   # 確認を求めた
+  - work_handed_back         # 作業主体を人へ戻した
+  - blocked_by_policy        # policy により停止
+  - blocked_by_gate          # gate により停止
+  - no_intervention          # 介入なし
+  - repaired_by_gate         # gate が **修理方向として許可** した (壊れた現在地を正しい値へ直す操作。2026-08-03)
+
+# 失敗・停止の原因 (failures.reason / cause / report.cause)
+failure_cause:
+  - config_unreadable
+  - config_invalid
+  - dependency_missing
+  - permission_denied
+  - timeout
+  - contract_violation
+  - state_stale
+  - population_shrunk
+  - checksum_mismatch
+  - cross_source_mismatch
+  - unregistered_origin
+  - type_mismatch
+  - not_implemented
+  - upstream_failed
+  - unknown                  # **不明を不明として打つ。推測で埋めない**
+
+# 判定の要約 (payload_summary)
+verdict_summary:
+  - pass
+  - block
+  - flag
+  - skip
+  - noop_clean
+  - degraded
+  - refused
+
+# 証拠の種別 (candidates.raw_evidence の置換)
+evidence_kind:
+  - ledger_record
+  - test_result
+  - measured_command
+  - config_declaration
+  - external_review
+  - none
+
+# lane 越境の拒否・隔離 (next-axis-select の dropped_cross_lane.reason /
+# locus_out_of_lane[].reason。定義点 = _project_boundary.lane_refusal)
+# 2026-08-11 (F-082 隣接修理): 89 字の散文を構造ラベル化。owner 値は別置き
+# (goal= / target= の値は registry owner の閉集合)。
+lane_route:
+  - owner_lane_mismatch       # goal と target の owner lane が不一致 → 起票拒否
+
+# 捕捉 record の定型注記 (credential_exposure_detect.py の note)
+# 2026-08-11: 毎 record 同一の説明散文 (113 字) を列挙ラベル化。説明は emitter の
+# comment と triage_transcript_secrets.py 側 doc が持つ
+capture_note:
+  - value_not_recorded        # 値は記録していない (fp + len のみ)
+
+# 上記に収まらない場合の扱い。**pass ではない。**
+# ラベルを選べないものは quarantine へ落とし、語彙更新ループ (K1) の入力にする。
+# 無人運転の物理層 (unattended-physical-guard の payload.checks[].detail)
+# 2026-08-03: 自由記述で書いており prose ratchet を赤にしていた。
+# **状態は列挙、数値は別 field** (数値を文にしない)。
+physical_layer:
+  - caffeinate_running        # 常駐している
+  - caffeinate_absent         # 常駐していない (--apply で起動)
+  - cli_not_found             # cc CLI が PATH/実体とも不達
+  - cli_version_ok            # --version が rc=0
+  - cli_probe_failed          # --version が非 0 / 例外
+  - spawn_exit_nonzero        # 直近 1h に非 0 終了の spawn がある (件数は count 欄)
+  - spawn_exit_clean          # 非 0 終了なし
+
+on_unmappable: quarantine

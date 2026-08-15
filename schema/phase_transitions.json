@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "_note": [
+    "Transition type definition. Single definition point; scripts/phase_gate.py is",
+    "the only reader.",
+    "",
+    "The point of writing the order down is not documentation. It is that a phase",
+    "can then be skipped only by editing this file, which is a visible act, rather",
+    "than by declaring in prose that the phase happened."
+  ],
+  "phases": [
+    {"id": "Think",       "purpose": "define what is being attempted"},
+    {"id": "Plan",        "purpose": "design the procedure"},
+    {"id": "Plan Review", "purpose": "have the plan checked by an independent basis before any of it is built"},
+    {"id": "Build",       "purpose": "execute"},
+    {"id": "Review",      "purpose": "check the result"},
+    {"id": "Test",        "purpose": "prove it, with controls that can fail"},
+    {"id": "Ship",        "purpose": "deliver"},
+    {"id": "Verify",      "purpose": "confirm it in the place it was delivered to"},
+    {"id": "Reflect",     "purpose": "record what was learned, including what was not achieved"}
+  ],
+  "terminal": "Done",
+  "rules": {
+    "advance": "from phase i, the only permitted next phases are i (re-enter) and i+1",
+    "skip": "rejected",
+    "backward": "rejected",
+    "enter": "the only permitted entry phase is the first one",
+    "terminal_from": "Reflect",
+    "unknown_phase": "rejected as undecidable (exit 2), never as 'allowed'"
+  },
+  "why_no_skip": [
+    "Every phase in this list exists because its absence was observed to cause a",
+    "specific failure, not because the list looked complete. 'Plan Review' is here",
+    "because plans that were only self-reviewed passed and then failed in Build.",
+    "",
+    "The rule that matters is the last one: an unknown phase name is rejected rather",
+    "than allowed. A gate that lets through what it does not recognise is a gate",
+    "that can be bypassed by inventing a name."
+  ]
+}

@@ -1,0 +1,24 @@
+incierge-oss
+Copyright 2026 Incierge
+
+This product includes software developed by the incierge project.
+
+Licensed under the Apache License, Version 2.0. See the LICENSE file.
+
+---
+
+Third-party material
+--------------------
+
+None at present.
+
+The content scanner carries a class for third-party OSS
+(`e_third_party_oss` in docs/prereg.scan.md, severity `warn`). If material
+under another licence is ever carried into this repository, its copyright and
+licence text are reproduced in this file, separately from Apache-2.0, rather
+than being covered by the Apache notice alone. A permissive licence such as MIT
+requires its own copyright notice to be preserved; an Apache-2.0 notice on its
+own does not satisfy that.
+
+Recorded scans have found no such material. The last full scan covered every
+tracked file and reported zero warnings in this class.

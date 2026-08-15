@@ -1,0 +1,4 @@
+# The one remote this repository may be pushed to. Exact string match.
+# Anything else, including an unset or unreadable value, is rejected by
+# hooks/pre-push.
+https://github.com/Incierge3789/incierge-oss.git

@@ -1,0 +1,49 @@
+#!/bin/sh
+# content guard. Runs the forensic scanner from docs/prereg.scan.md over the
+# staged content, not the working tree, so that what is checked is what is
+# committed.
+#
+# Every gate below is fail-closed: a non-zero exit for any reason rejects the
+# commit. "the check could not run" is never allowed to read as "the check
+# passed".
+set -u
+
+ROOT=$(git rev-parse --show-toplevel) || {
+    echo "pre-commit REJECT: not inside a git repository" >&2
+    exit 1
+}
+cd "$ROOT" || exit 1
+
+PY=${PYTHON:-python3}
+fail=0
+
+echo "pre-commit: content guard"
+"$PY" scripts/scan_forensic.py --staged || fail=1
+
+echo "pre-commit: positive-control self-check"
+"$PY" scripts/control_selfcheck.py || fail=1
+
+echo "pre-commit: tautological-control gate"
+"$PY" scripts/tautological_control_gate.py || fail=1
+
+echo "pre-commit: ledger schema"
+"$PY" scripts/ledger_gate.py --type negative_result --file ledger/negative_results.jsonl >/dev/null || fail=1
+
+echo "pre-commit: transition definition"
+"$PY" scripts/phase_gate.py --from Reflect --to Done >/dev/null || fail=1
+
+if [ "$fail" -ne 0 ]; then
+    cat >&2 <<'EOF'
+
+pre-commit REJECT.
+
+If a hit is a false positive, the fix is to change the pattern table in
+docs/prereg.scan.md and say why in the commit. There is deliberately no
+per-line suppression comment and no --no-verify path documented here: a guard
+with a convenient bypass is measured, over time, as a guard that is bypassed.
+EOF
+    exit 1
+fi
+
+echo "pre-commit: OK"
+exit 0

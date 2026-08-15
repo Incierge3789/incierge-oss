@@ -1,0 +1,63 @@
+#!/bin/sh
+# push guard. Rejects unless the destination is exactly the one allowed remote,
+# and unless this really is the repository these hooks belong to.
+#
+# git passes: $1 = remote name, $2 = remote URL.
+#
+# Mismatch, unset, and undecidable all reject. There is no "warn and continue"
+# branch, because the failure this guards against is the one where content
+# leaves for the wrong destination, and that is not recoverable by noticing it
+# afterwards.
+set -u
+
+REJECT_LOG_DIR=$(git rev-parse --git-dir 2>/dev/null) || REJECT_LOG_DIR=""
+LOG="${REJECT_LOG_DIR:-.}/push_guard_rejections.log"
+
+reject() {
+    # append-only, and inside .git so the log itself can never be committed
+    printf '%s\treject\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" >> "$LOG" 2>/dev/null
+    echo "pre-push REJECT: $1" >&2
+    exit 1
+}
+
+ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || reject "not inside a git repository"
+cd "$ROOT" || reject "cannot enter repository root"
+
+# --- is this the repository these hooks belong to? ------------------------
+#
+# The obvious implementation is to hard-code the private repository's
+# filesystem path and reject on a match. That path is exactly the kind of
+# string the content guard classifies as a leak (class c6, local user path), so
+# a guard written that way would fail this repository's own scan. Identity is
+# therefore asserted positively, by the markers this repository must contain,
+# which also rejects the case the path test was aiming at: these hooks copied
+# into some other checkout.
+for marker in docs/prereg.scan.md config/allowed_remote.txt scripts/scan_forensic.py; do
+    [ -f "$marker" ] || reject "missing marker $marker — these hooks are not in their own repository"
+done
+
+ALLOWED_FILE="config/allowed_remote.txt"
+ALLOWED=$(sed -e 's/#.*//' -e 's/[[:space:]]*$//' "$ALLOWED_FILE" | grep -v '^$' | head -n 1)
+[ -n "${ALLOWED:-}" ] || reject "$ALLOWED_FILE declares no remote"
+
+REMOTE_NAME=${1:-}
+REMOTE_URL=${2:-}
+[ -n "$REMOTE_URL" ] || reject "remote URL not supplied by git (undecidable)"
+
+if [ "$REMOTE_URL" != "$ALLOWED" ]; then
+    reject "remote '$REMOTE_NAME' is $REMOTE_URL, allowed is $ALLOWED"
+fi
+
+FORBIDDEN_FILE="config/forbidden_remotes.txt"
+if [ -f "$FORBIDDEN_FILE" ]; then
+    while IFS= read -r line; do
+        line=$(printf '%s' "$line" | sed -e 's/#.*//' -e 's/[[:space:]]*$//')
+        [ -n "$line" ] || continue
+        [ "$REMOTE_URL" = "$line" ] && reject "remote $REMOTE_URL is on the forbidden list"
+    done < "$FORBIDDEN_FILE"
+else
+    reject "$FORBIDDEN_FILE is missing — cannot decide, so refusing"
+fi
+
+echo "pre-push: OK ($REMOTE_URL)"
+exit 0

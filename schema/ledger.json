@@ -1,0 +1,119 @@
+{
+  "version": 1,
+  "_note": [
+    "Single definition point for every ledger record type in this repository.",
+    "scripts/ledger_gate.py is the only reader. There is deliberately no second",
+    "copy in JSON Schema form: two definitions drift, and only one of them gets",
+    "fixed.",
+    "",
+    "Supported field types: string, integer, number, boolean, array, object,",
+    "iso8601_date, iso8601_datetime.",
+    "A field may declare: required, pattern, enum, min_length, items, nullable,",
+    "vocabulary (a closed label set loaded from another file)."
+  ],
+  "vocabularies": {
+    "failure_cause": {
+      "file": "schema/emit_reason_codes.yaml",
+      "section": "failure_cause",
+      "why": "the label set is closed on purpose: free text in a cause field makes recurrence uncountable"
+    },
+    "intervention": {
+      "file": "schema/emit_reason_codes.yaml",
+      "section": "intervention"
+    }
+  },
+  "types": {
+    "prereg": {
+      "title": "pre-registration of a claim, written before the measurement runs",
+      "fields": {
+        "id": {"type": "string", "required": true, "pattern": "^PR-[0-9]{3,}$"},
+        "registered": {"type": "iso8601_date", "required": true},
+        "question": {"type": "string", "required": true, "min_length": 10},
+        "claim": {"type": "string", "required": true, "min_length": 10},
+        "arms": {"type": "array", "items": "string", "required": true, "min_length": 2},
+        "metric": {"type": "string", "required": true, "min_length": 3},
+        "metric_definition_point": {"type": "string", "required": true,
+          "_why": "a path. The metric must be defined in exactly one place, or every arm can quietly use its own"},
+        "decision_rule": {"type": "string", "required": true, "min_length": 10},
+        "win_conditions": {"type": "array", "items": "string", "required": true, "min_length": 1},
+        "stop_conditions": {"type": "array", "items": "string", "required": true, "min_length": 1,
+          "_why": "the conditions under which the result is NOT scored. Without these, a failed control gets read as a weak result"},
+        "controls": {"type": "array", "items": "string", "required": true, "min_length": 1,
+          "_why": "a claim with no control is not falsifiable"},
+        "negative_result_is_a_result": {"type": "boolean", "required": true,
+          "_why": "must be stated before the run, so that a null finding cannot be reframed afterwards as a failed experiment"}
+      }
+    },
+    "negative_result": {
+      "title": "a claim that was measured and did not survive",
+      "fields": {
+        "id": {"type": "string", "required": true, "pattern": "^NR-[0-9]{3,}$"},
+        "claim": {"type": "string", "required": true, "min_length": 10},
+        "prereg_criteria": {"type": "string", "required": true, "min_length": 10,
+          "_why": "the pass/fail rule as it was registered, not as it reads in hindsight"},
+        "measured": {"type": "string", "required": true, "min_length": 10,
+          "_why": "numbers. 'it did not work' is not a measurement"},
+        "verdict": {"type": "string", "required": true,
+          "enum": ["refuted", "not_supported", "withdrawn", "substrate_unfit", "inconclusive"]},
+        "withdrawn_claim": {"type": "string", "required": true, "nullable": true,
+          "_why": "if something was previously asserted and is now retracted, the retracted wording is recorded verbatim"},
+        "reopen_condition": {"type": "string", "required": true, "min_length": 5,
+          "_why": "either the evidence that would reopen this, or an explicit statement that nothing will"},
+        "date": {"type": "iso8601_date", "required": true},
+        "source": {"type": "string", "required": false}
+      }
+    },
+    "decision": {
+      "title": "a decision record",
+      "fields": {
+        "id": {"type": "string", "required": true, "pattern": "^D-[0-9]{3,}$"},
+        "ts": {"type": "iso8601_datetime", "required": true},
+        "title": {"type": "string", "required": true, "min_length": 5},
+        "context": {"type": "string", "required": true, "min_length": 10},
+        "reason": {"type": "string", "required": true, "min_length": 10},
+        "type": {"type": "string", "required": true,
+          "enum": ["design_choice", "policy", "scope", "retraction", "acceptance"]},
+        "supersedes": {"type": "string", "required": false, "nullable": true}
+      }
+    },
+    "failure": {
+      "title": "a failure record",
+      "fields": {
+        "id": {"type": "string", "required": true, "pattern": "^F-[0-9]{3,}$"},
+        "ts": {"type": "iso8601_datetime", "required": true},
+        "symptom": {"type": "string", "required": true, "min_length": 10},
+        "cause_code": {"type": "string", "required": true, "vocabulary": "failure_cause"},
+        "detected_by": {"type": "string", "required": true, "min_length": 3,
+          "_why": "which check caught it. 'noticed while reading' is an admission that no check exists"},
+        "close_predicate": {"type": "string", "required": true, "min_length": 5,
+          "_why": "the machine condition under which this is closed. Written at open time, not at close time"},
+        "status": {"type": "string", "required": true, "enum": ["open", "closed", "unmeasurable"]}
+      }
+    },
+    "external_response": {
+      "title": "a response to an issue raised from outside this repository",
+      "_defined_but_not_counted": [
+        "This type exists so that external responses have a schema on the day the",
+        "repository is first published. Nothing is counted yet.",
+        "",
+        "It is a SEPARATE instrument. External responses must never be added to the",
+        "numerator of the human-intervention rate: that numerator counts occasions on",
+        "which the work moved back to a human inside the system's own loop. Answering",
+        "someone else's question is not that, and folding the two together would make",
+        "the system look worse the more useful it is to other people — which would",
+        "create a standing incentive to ignore them."
+      ],
+      "fields": {
+        "id": {"type": "string", "required": true, "pattern": "^XR-[0-9]{3,}$"},
+        "ts": {"type": "iso8601_datetime", "required": true},
+        "issue_ref": {"type": "string", "required": true, "min_length": 1},
+        "kind": {"type": "string", "required": true,
+          "enum": ["guard_false_negative", "control_did_not_fire", "ledger_discipline_break", "question", "other"]},
+        "outcome": {"type": "string", "required": true,
+          "enum": ["reproduced_and_fixed", "reproduced_not_fixed", "not_reproduced", "declined", "pending"]},
+        "test_added": {"type": "string", "required": true, "nullable": true,
+          "_why": "the path of the test that now covers it, or null with the reason recorded in the outcome"}
+      }
+    }
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "ts": "2026-08-15",
+  "rule": "**cannot grow**. compared as a set of paths",
+  "count": 0,
+  "paths": [],
+  "generated_by": "scripts/tautological_control_gate.py --write-exceptions"
+}

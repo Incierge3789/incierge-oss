@@ -1,0 +1,42 @@
+{
+  "_readme": [
+    "Literal deny-list for the classes that cannot be published as patterns.",
+    "Copy this file to config/literals.json and replace the fictional entries with",
+    "your own. config/literals.json is path-guarded in .gitignore and can never be",
+    "committed. The scanner fails closed if this file is missing or unparsable —",
+    "absence is not emptiness.",
+    "",
+    "Separator expansion: '-', '_' and space inside a literal are compiled to",
+    "[\\s\\-_]* , so 'acme-tek' matches acmetek / acme tek / acme_tek / AcmeTek.",
+    "",
+    "exclude_compounds: use when a literal is also an ordinary word. The literal",
+    "still hits on its own; it is suppressed only inside the enumerated compounds.",
+    "The third d_person_literal entry below shows the shape: a surname that is",
+    "also a common noun, suppressed inside the compounds where it cannot be a",
+    "name, and still caught when it stands alone.",
+    "",
+    "positive_control: a payload that MUST match this class. The test suite",
+    "re-matches it against the compiled patterns, so the control cannot rot into a",
+    "no-op when a literal is edited."
+  ],
+  "a_proper_noun": {
+    "literals": [
+      "acme-tek",
+      "acmeguard",
+      "acme-widgets-inc"
+    ],
+    "positive_control": "AcmeTek"
+  },
+  "c_customer_literal": {
+    "literals": [],
+    "declared_empty_reason": "the example configuration ships no customer list; customer names are still reachable through the c7 company/honorific markers, but literal coverage for this class is zero and is reported on every run"
+  },
+  "d_person_literal": {
+    "literals": [
+      {"literal": "yamada", "exclude_compounds": []},
+      {"literal": "山田", "exclude_compounds": []},
+      {"literal": "森", "exclude_compounds": ["森林", "森羅万象"]}
+    ],
+    "positive_control": "Yamada"
+  }
+}

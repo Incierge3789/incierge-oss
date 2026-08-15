@@ -1,0 +1,7 @@
+# Remotes that must never receive a push from this repository, listed
+# explicitly rather than inferred. The first entry is the private repository
+# this publication was derived from: the failure being guarded against is
+# public content and private content arriving at each other's destination.
+#
+# This file must exist. Its absence is treated as undecidable and rejects.
+https://github.com/Incierge3789/incierge.git

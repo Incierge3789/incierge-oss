@@ -26,7 +26,14 @@ def main() -> int:
         r = subprocess.run([sys.executable, str(t)], cwd=ROOT)
         if r.returncode != 0:
             failed.append((rel, r.returncode))
-    print(f"\n=== {len(TESTS) - len(failed)}/{len(TESTS)} test files passed ===")
+    # The failure list goes on the SAME line as the summary, and last.
+    # Twice this suite reported 8/9 and the failing name was lost, because the
+    # caller had piped the run through `tail -1` and the detail was printed
+    # above the summary. A result line that does not survive the most obvious
+    # way of reading it is a result line that gets read wrong.
+    names = " ".join(f"{rel}(rc={rc})" for rel, rc in failed)
+    print(f"\n=== {len(TESTS) - len(failed)}/{len(TESTS)} test files passed ==="
+          + (f" FAILED: {names}" if failed else ""))
     for rel, rc in failed:
         print(f"  FAILED {rel} (rc={rc})", file=sys.stderr)
     return 1 if failed else 0

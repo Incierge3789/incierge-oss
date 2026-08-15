@@ -135,9 +135,30 @@ rather than republished with a caveat.
 Extracted from a private repository at commit
 `aa1a5a68e27b3992a26386edc301e898b8887153`, dated 2026-08-15T06:59:46+09:00.
 This repository has no history in common with it: it starts from an empty root,
-and every file here was scanned before it was placed. The Japanese-language
-documents under `docs/ja/` are byte-identical copies from that commit; their
-digests are in `docs/ja/README.md`.
+and every file here was scanned before it was placed.
+
+Seven files were copied from that commit. **Two are byte-identical to their
+source. Five were adapted**, each with one declared change, because an audit
+found that the copies carried private paths and an internal identifier
+namespace that `docs/disclosure.md` rule D5 makes private.
+
+| | files | what the digest table in `docs/ja/README.md` records |
+|---|---|---|
+| verbatim | 2 | one digest, which is both the source's and the published file's |
+| adapted | 5 | two digests — the source's and the published file's — plus what changed |
+
+A test asserts that a verbatim row really is identical and an adapted row really
+is not, so an edited file cannot keep a verbatim claim.
+
+**What you cannot check from outside.** For the adapted five, the claim is
+"nothing was removed except structure — no measurement, no threshold, no
+conclusion." The digests prove only that the file **differs** from its source.
+They cannot show that the difference is confined to the one change described,
+because you do not have the source. **That claim rests on trust, and this
+paragraph is here so that it is not mistaken for something the digests
+established.** If it matters to you, the measurements themselves were moved into
+`ledger/negative_results.jsonl` (`NR-005`) where they can be read directly rather
+than inferred from a copy.
 
 ## What this does not claim
 

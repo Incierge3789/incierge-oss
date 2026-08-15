@@ -234,6 +234,8 @@ declared-empty), which is why §5b forces that to be printed rather than assumed
         {"name": "b2_future_patent_id", "regex": "\\bfp[\\s\\-_#.:]?\\d{3,}\\b"},
         {"name": "b3_objective_id", "regex": "\\bao[\\s\\-_#.:]?\\d{3,}\\b"},
         {"name": "b12_internal_workitem", "regex": "\\btask[\\-_][a-z0-9]{1,3}\\b", "example_hit": "frozen by TASK-E/F", "example_miss": "the task-list is empty", "_why": "an internal work-item namespace found by an open-world audit, not by the table. A separator is required because a bare space matches ordinary prose (\"task in\")."},
+        {"name": "b16_internal_review_item", "regex": "\\bdiff[\\-_]\\d{1,2}\\b", "example_hit": "adopted DIFF-3", "example_miss": "git diff-tree output"},
+        {"name": "b17_internal_case_label", "regex": "\\bcase[\\-_]\\d{1,2}\\b", "example_hit": "resolved as CASE-2", "example_miss": "the comparison is case-insensitive"},
         {"name": "b13_internal_backlog", "regex": "\\bbl[\\-_]\\d{2,}\\b"},
         {"name": "b14_internal_signal", "regex": "\\bsig[\\-_]\\d{1,2}\\b"},
         {"name": "b15_internal_ruling", "regex": "\\bruling[\\-_][a-z0-9][a-z0-9\\-]{1,}\\b"},
@@ -562,3 +564,34 @@ to be decided per prefix rather than by a shape rule.
 
 Direction: strictly stricter. The full set was re-scanned — 76 patterns, 42
 files, 0 hits, 0 warnings, 0 unscannable.
+
+### Amendment 6 — 2026-08-15, internal identifier namespaces: the inventory, finished
+
+Amendment 5 added four namespaces and said the next unknown one would need the
+same kind of look. This is that look, done deliberately rather than by accident,
+over every label scheme used in the work that produced this repository.
+
+**Added** — a private-system namespace with no ordinary-English collision:
+
+| pattern | namespace | why it is safe to add |
+|---|---|---|
+| `b16_internal_review_item` | `DIFF-n` | 0 occurrences in the publication; `diff-` followed by a digit is not ordinary prose (`git diff-tree` has no digit) |
+| `b17_internal_case_label` | `CASE-n` | digits only. `case-insensitive` and `case-sensitive` are the collision, and requiring a digit removes both — verified against the two real occurrences in this repository |
+
+**Deliberately not added**, each for a stated reason. This half of the decision
+is the part that would otherwise be invisible:
+
+| candidate | why not |
+|---|---|
+| `STEP-n` | `step-1` is ordinary technical prose. A step number is a position in an instruction, not an identifier of anything in the private system, so the leak value is approximately zero while the false-positive cost is real |
+| `PHASE-n` | same, and this repository **publishes a phase model as its subject matter** (`schema/phase_transitions.json`). A rule that collides with what the repository is about is a rule that gets switched off |
+| `Q<digit>` | there are **8 occurrences in this repository and every one of them is one of its own control identifiers** (`Q0`–`Q5` in the parity tests). Banning it would make the repository fail its own scan. The one real leak of this shape, `RULING_Q5`, is already caught by `b15_internal_ruling` |
+
+The rule that decides these is the one Amendment 5 arrived at and this
+amendment confirms: **the question is not "internal versus external", it is
+"the private system's namespace versus this repository's own namespace"**, and
+it has to be settled per prefix by looking at what the prefix actually collides
+with here. A shape rule cannot do it — `D-`, `NR-`, `Q1` and `PAT-001` are the
+same shape and land on opposite sides.
+
+Direction: strictly stricter. Full set re-scanned after adding.

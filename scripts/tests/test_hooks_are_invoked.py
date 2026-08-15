@@ -17,6 +17,9 @@ outcome by the state that would have changed:
      the receiving repository ends up with zero objects
   D. **negative control** — the push guard accepts the permitted remote, so C
      is not passing because pushes are broken
+  E. a staged **type change** is scanned. Neither reviewer found this; the
+     staged-file enumeration omitted `T`, so replacing a tracked file with a
+     symlink slipped past, and a symlink's target is a place to put a string
 
 C pushes to a throwaway bare repository on disk. Nothing leaves the machine,
 and the assertion is that nothing arrives even there.
@@ -98,6 +101,25 @@ with tempfile.TemporaryDirectory() as tmp:
     check("B1 **negative control**: an ordinary commit succeeds", good.returncode == 0,
           good.stderr[-300:])
     check("B2 and HEAD moved", head_after != base_head, head_after)
+
+    print("== E. a staged type change is not a blind spot ==")
+    # Found by self-falsification, not by either reviewer: the staged-file
+    # enumeration used --diff-filter=ACMR, which omits T. Replacing a tracked
+    # file with a symlink is a staged change, and `git show :path` on a symlink
+    # returns its target — a place to put a string.
+    target = payload_text().splitlines()[0]
+    (work / "ordinary.txt").unlink()
+    (work / "ordinary.txt").symlink_to(target)
+    git(["add", "ordinary.txt"], work, env)
+    kinds = git(["diff", "--cached", "--name-status"], work, env).stdout
+    check("E0 the change really is staged as a type change",
+          kinds.startswith("T"), kinds.strip()[:80])
+    typed = git(["commit", "-q", "-m", "type change"], work, env)
+    check("E1 a staged type change is scanned and refused", typed.returncode != 0,
+          f"rc={typed.returncode}")
+    check("E2 and the payload in the link target is what was caught",
+          "HIT" in typed.stderr and "ordinary.txt" in typed.stderr, typed.stderr[-300:])
+    git(["reset", "-q", "--hard", "HEAD"], work, env)
 
     print("== C/D. git push ==")
     bare = pathlib.Path(tmp) / "elsewhere.git"

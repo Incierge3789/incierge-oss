@@ -390,9 +390,13 @@ def scan_paths(root: pathlib.Path, rels, prereg: dict, patterns: list,
 
 
 def staged_paths(root: pathlib.Path) -> list:
+    # ACMRT, not ACMR. A type change — a tracked regular file replaced by a
+    # symlink — is a staged change that the shorter filter walked straight
+    # past, and `git show :path` on a symlink returns its target, which is
+    # somewhere to put a string. Deletions stay out: there is nothing to read.
     r = subprocess.run(
         ["git", "-C", str(root), "diff", "--cached", "--name-only",
-         "--diff-filter=ACMR"], capture_output=True, text=True)
+         "--diff-filter=ACMRT"], capture_output=True, text=True)
     if r.returncode != 0:
         raise Undecidable("cannot enumerate staged files — not reading that as 'no violations'")
     return [l.strip() for l in r.stdout.splitlines() if l.strip()]

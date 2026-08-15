@@ -88,15 +88,40 @@ are reported because a claim about a discipline is worth what its numbers are
 worth.
 
 - The instrument that matters most is the human-intervention rate, and it is
-  **red**. Over a window of 104 completed tasks: 6 occasions where the work
-  actually moved back to a person (0.0577), and 19 attempts to move it
-  (0.1827), of which 13 were stopped by a gate. The pass condition is not a
-  threshold, it is **numerator zero** — so 0.0577 is red, and a figure like
-  0.0112 would also be red. A target you can reach by tightening a threshold is
-  not the target.
+  **red**. Read at 2026-08-15T04:45Z: **18** occasions where the work actually
+  moved back to a person and **53** attempts to move it, of which **35** were
+  stopped by a gate, over a denominator of **699**.
+
+  **The pass condition is numerator zero, not a threshold.** The private
+  system's canon states a target of `< 0.05` and then says explicitly that the
+  target is a waypoint and not the pass line; the instrument contains no
+  threshold at all, only `GREEN if numerator == 0 else RED`. So 0.0258 is red,
+  and 0.0112 would also be red. A target you can reach by tightening a threshold
+  is not the target.
+
+  **One thing about that numerator is unresolved, and hiding it would be the
+  same defect this repository is about.** The canon permits human involvement
+  for an enumerated set of gate items — physical authority, legal judgement,
+  named credentials — but the numerator carries no exemption for them, so
+  correctly routing a decision that only a person may lawfully make still
+  increments it. Whether such cases should be excluded is undecided, and it is
+  **not currently decidable from the record**: the ledger stores the linguistic
+  form of a hand-off, not the kind of decision behind it. Filed as an open
+  defect against the private system rather than settled by picking a side here.
+
+  **The denominator is a proxy, and it is labelled more confidently than it
+  measures.** It counts assistant responses, under the field name "completed
+  tasks", over a window that defaults to the current day. Two consequences worth
+  stating plainly: the rate improves as the system talks more, and the value
+  moves within a single day — an earlier reading the same day was 6 over 104.
+  **This is a reading with a timestamp, not a property of this repository.**
 - The phase order and the gate chain described here are the ones the private
-  system runs on; `scripts/tautological_control_gate.py` is carried over
-  byte-for-byte rather than reimplemented for publication.
+  system runs on. `scripts/tautological_control_gate.py` came from that system
+  rather than being reimplemented for publication — but it is **one of the five
+  copies that were adapted**, not one of the two that remain byte-identical:
+  two glob patterns naming private lanes and one internal identifier were
+  removed. `docs/ja/README.md` records source and published digests for all
+  seven copies, and which two are still byte-identical.
 - Cross-review runs with a quorum of two independent bases. That is an
   operating practice, **not something this repository ships** — there is no
   cross-review tool, hook, or config here, and nothing in `make check` enforces
@@ -106,9 +131,9 @@ worth.
 **None of the underlying data is in this repository, and you cannot re-derive
 these numbers from it.** The 104-task window is private operational telemetry;
 what is published is the schema those records have (`schema/ledger.json`), not
-the records. The `source` field on each negative result likewise names a path
-inside the private repository at the anchor commit — those paths do not resolve
-here, by design. Treat the figures as reported, not as reproducible: the
+the records. The `source` field on each negative result names **the lane a
+measurement came from, not a path** — earlier versions carried private
+repository paths, and `docs/disclosure.md` rule D5 took them out. Treat the figures as reported, not as reproducible: the
 reproducible part of this repository is the gates, and those you can run.
 
 ## Negative results

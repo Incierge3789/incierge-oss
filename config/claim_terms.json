@@ -1,0 +1,21 @@
+{
+  "_readme": [
+    "Terms this repository does not use about itself, and the disclaimer it must",
+    "carry. Read by scripts/tests/test_docs_parity.py; there is no second copy.",
+    "",
+    "The list exists because a priority claim is the cheapest thing to write and",
+    "the most expensive thing to withdraw. ADR-0002 in the private repository",
+    "makes a prior-art check a precondition of publication; that check has not",
+    "been performed, so the mitigation is structural: the repository is not",
+    "permitted to claim priority or superiority in the first place, and a test",
+    "fails if it starts to."
+  ],
+  "banned_terms": [
+    "世界初", "業界初", "圧倒的", "唯一無二",
+    "world first", "world's first", "first ever", "unprecedented",
+    "revolutionary", "groundbreaking", "state of the art", "best in class",
+    "no other", "nothing else like"
+  ],
+  "required_anchor": "What this does not claim",
+  "guarded_files": ["README.md", "docs/architecture.md", "docs/goal.md", "CONTRIBUTING.md"]
+}

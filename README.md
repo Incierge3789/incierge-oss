@@ -138,6 +138,21 @@ and every file here was scanned before it was placed. The Japanese-language
 documents under `docs/ja/` are byte-identical copies from that commit; their
 digests are in `docs/ja/README.md`.
 
+## What this does not claim
+
+No priority and no superiority. Nothing here is asserted to be first, novel, or
+better than anything else, and the repository assumes contemporaneous work
+exists that it does not cite — a prior-art search has **not** been performed.
+
+That is a structural constraint rather than a stylistic preference:
+`config/claim_terms.json` lists the terms this repository may not use about
+itself, and a test fails if any of them appears in the documents it guards. A
+priority claim is the cheapest sentence to write and the most expensive one to
+withdraw, and the record here already contains one withdrawal (`NR-003`).
+
+What is claimed is narrower and checkable: the gates in this repository do what
+their controls demonstrate, on the machine you run them on.
+
 ## What is deliberately included
 
 `docs/ja/` and the `source` fields in the negative-results ledger name the

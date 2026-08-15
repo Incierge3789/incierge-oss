@@ -75,5 +75,24 @@ check("A1 exactly one anchor commit is referenced", len(anchors) == 1, str(ancho
 check("A2 it appears in both documents",
       all(any(a in doc for a in anchors) for doc in (README, JA)))
 
+print("== the repository does not claim priority or superiority ==")
+# ADR-0002 in the private repository makes a prior-art check a precondition of
+# publication. That check has not been performed, so the mitigation is
+# structural rather than a promise: the terms are declared in one place and a
+# failing test is what keeps them out.
+rules = json.loads((REPO / "config/claim_terms.json").read_text(encoding="utf-8"))
+banned = rules["banned_terms"]
+check("R0 **negative control**: the banned list is non-empty", len(banned) >= 5,
+      f"{len(banned)} terms")
+for rel in rules["guarded_files"]:
+    body = (REPO / rel).read_text(encoding="utf-8").lower()
+    found = sorted({b for b in banned if b.lower() in body})
+    check(f"R1 {rel} makes no priority or superiority claim", found == [], str(found))
+anchor = rules["required_anchor"]
+check("R2 the disclaimer is present in README", anchor in README, anchor)
+check("R3 **negative control**: the guard can fail",
+      any(b.lower() in (anchor + " " + banned[0]).lower() for b in banned),
+      "the matcher does not match its own term, so R1 proves nothing")
+
 print(f"\ndocs-parity: FAIL {len(FAILED)}")
 sys.exit(1 if FAILED else 0)

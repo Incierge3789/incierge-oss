@@ -96,8 +96,13 @@ def first_entry(path: pathlib.Path) -> str:
     raise AssertionError(f"{path} declares nothing")
 
 
+sys.path.insert(0, str(REPO / "scripts"))
+import canonical_remote as C  # noqa: E402
+
+
 def sha256(s: str) -> str:
-    return hashlib.sha256(s.encode()).hexdigest()
+    """Digest of the canonical form — the same thing the hook hashes."""
+    return C.digest(s)
 
 
 # Read from the configuration rather than repeating it. Cross-review (agy, P1)
@@ -117,26 +122,35 @@ with tempfile.TemporaryDirectory() as tmp:
     check("B1 **negative control**: nothing planted -> accepted",
           clean.returncode == 0, f"rc={clean.returncode} {clean.stderr[-400:]}")
 
-    planted = box / "planted.txt"
-    planted.write_text("\n".join(f"{cid}: {p}" for cid, p in sorted(pc.items())) + "\n",
-                       encoding="utf-8")
-    subprocess.run(["git", "add", "planted.txt"], cwd=box, env=env, check=True)
+    # One payload per file. Two rounds of review found A2 passing for the wrong
+    # reason: first because a bare class name appears in stderr even when the
+    # self-check *fails* (cursor P1), then because one payload can trip a
+    # second class — the shape control's payload contains the literal control's
+    # payload — so a dead class still had its name printed (agy P1). The
+    # assertion is now: this class produced a HIT on the file that carries only
+    # its own payload.
+    planted_files = {}
+    for i, (cid, payload) in enumerate(sorted(pc.items())):
+        name = f"planted_{i}.txt"
+        (box / name).write_text(payload + "\n", encoding="utf-8")
+        planted_files[cid] = name
+        subprocess.run(["git", "add", name], cwd=box, env=env, check=True)
     hit = run_hook("pre-commit", box, tmp)
     check("A1 **positive**: a payload per class -> rejected",
           hit.returncode != 0, f"rc={hit.returncode}")
-    # Match the scanner's own HIT line, not the bare class name. Cross-review
-    # (cursor, P1) showed that a broken class still leaves its name in stderr
-    # via the self-check's failure message, so `cid in stderr` would stay green
-    # while the class matched nothing.
     for cid in REQUIRED_CLASSES:
-        check(f"A2 a scan HIT is reported for {cid}", f"[{cid}/" in hit.stderr,
-              hit.stderr[-500:])
+        needle = f"{planted_files[cid]}:"
+        lines = [ln for ln in hit.stderr.splitlines()
+                 if ln.startswith("HIT ") and needle in ln and f"[{cid}/" in ln]
+        check(f"A2 {cid} fires on its own payload alone", len(lines) > 0,
+              f"no HIT line for {planted_files[cid]} in class {cid}")
     check("A3 the two runs actually differ (the control is not tautological)",
           clean.returncode != hit.returncode,
           f"{clean.returncode} vs {hit.returncode}")
 
-    subprocess.run(["git", "rm", "-q", "--cached", "planted.txt"], cwd=box, env=env, check=True)
-    planted.unlink()
+    for name in planted_files.values():
+        subprocess.run(["git", "rm", "-q", "--cached", name], cwd=box, env=env, check=True)
+        (box / name).unlink()
 
     # C: warn severity is reported without blocking
     mit = box / "vendored_notice.txt"
@@ -170,6 +184,17 @@ with tempfile.TemporaryDirectory() as tmp:
                      ["origin", "https://github.com/someone/else.git"])
     check("F1 any other remote is rejected", other.returncode != 0, other.stdout[-200:])
 
+    # Equivalent spellings of the same destination. Under the earlier string
+    # comparison the first of these was rejected although it is the allowed
+    # remote, and the deny-list missed every spelling but one (agy, P0).
+    host_path = C.canonical(ALLOWED)
+    for spelling in (f"git@{host_path.split('/', 1)[0]}:{host_path.split('/', 1)[1]}.git",
+                     f"https://{host_path}",
+                     f"https://{host_path}.git/"):
+        alt = run_hook("pre-push", box, tmp, ["origin", spelling])
+        check(f"E2 an equivalent spelling of the allowed remote is accepted: {spelling}",
+              alt.returncode == 0, alt.stderr[-200:])
+
     # The deny-list holds digests, so the control supplies its own entry rather
     # than trying to recover a URL from one. It also asserts *which* rule
     # fired: with the deny-list checked after the allow-list it would be
@@ -185,6 +210,11 @@ with tempfile.TemporaryDirectory() as tmp:
         fh.write(sha256(test_url) + "\n")
     forb = run_hook("pre-push", box, tmp, ["origin", test_url])
     check("G1 a remote on the deny-list is rejected", forb.returncode != 0, forb.stdout[-200:])
+    ssh_spelling = "git@" + C.canonical(test_url).replace("/", ":", 1)
+    forb2 = run_hook("pre-push", box, tmp, ["origin", ssh_spelling])
+    check("G3 **and a different spelling of it is also rejected**",
+          forb2.returncode != 0 and "forbidden list" in forb2.stderr,
+          f"{ssh_spelling}: {forb2.stderr[-200:]}")
     check("G2 and the deny-list is what rejected it, not the allow-list",
           "forbidden list" in forb.stderr, forb.stderr[-200:])
 
@@ -207,8 +237,8 @@ with tempfile.TemporaryDirectory() as tmp:
     if log.is_file():
         lines = [l for l in log.read_text(encoding="utf-8").splitlines() if l.strip()]
         # F1, G1, K1, H1 rejected; E1 was accepted and must not be logged
-        check("J2 one line per rejection and none for the acceptance",
-              len(lines) == 4, f"{len(lines)} lines: {lines}")
+        check("J2 one line per rejection and none for the four acceptances",
+              len(lines) == 5, f"{len(lines)} lines: {lines}")
 
     (box / "config/allowed_remote.txt").unlink()
     stray = run_hook("pre-push", box, tmp, ["origin", ALLOWED])

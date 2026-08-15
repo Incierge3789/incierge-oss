@@ -48,29 +48,63 @@ class Undecidable(Exception):
 # normalization
 # --------------------------------------------------------------------------
 
-# Declared confusable folding, prereg.scan.md §2 step 5. Cross-review (cursor,
+# Declared confusable folding, prereg.scan.md §2 step 4. Cross-review (cursor,
 # P0, 2026-08-15) got a literal past the scanner by spelling it with a Cyrillic
 # character that renders identically. This is the common half of that attack;
 # it is NOT the full Unicode confusables table, and §2 says so.
-CONFUSABLES = str.maketrans({
+CONFUSABLES = {
     "а": "a", "е": "e", "о": "o", "р": "p", "с": "c",
     "у": "y", "х": "x", "і": "i", "ј": "j", "ѕ": "s",
     "ԁ": "d", "ԛ": "q", "ԝ": "w", "һ": "h", "т": "t",
     "ο": "o", "α": "a", "ε": "e", "ρ": "p", "ι": "i",
     "κ": "k", "τ": "t", "υ": "u", "χ": "x", "ν": "v",
-})
+}
+_CONFUSABLE_TABLE = str.maketrans(CONFUSABLES)
+
+# Combining marks are stripped only in the Latin/Greek/Cyrillic diacritic
+# blocks and the variation selectors. Stripping every Mn (the first attempt)
+# corrupted scripts that need combining marks to spell ordinary words —
+# Devanagari nukta, Arabic harakat, Ainu kana — which is a way of mangling text
+# rather than normalizing it (agy, P1).
+_STRIPPED_MARKS = (
+    tuple(range(0x0300, 0x0370))   # combining diacritical marks
+    + tuple(range(0x1AB0, 0x1B00))  # combining diacritical marks extended
+    + tuple(range(0x1DC0, 0x1E00))  # combining diacritical marks supplement
+    + tuple(range(0x20D0, 0x2100))  # combining marks for symbols
+    + tuple(range(0xFE00, 0xFE10))  # variation selectors
+)
+_MARKS = frozenset(chr(c) for c in _STRIPPED_MARKS)
+
+
+def _fold_confusables(token: str) -> str:
+    """Fold lookalikes only inside a token that mixes scripts.
+
+    A token written entirely in Greek or Cyrillic is ordinary text in that
+    language, and folding it produced false positives: a Greek word folded into
+    something that matched an identifier pattern and disqualified an innocent
+    file (agy, P1; the worked example is in docs/prereg.scan.md §9). The attack
+    this defends against is a lookalike smuggled *into* a Latin word, so folding
+    is applied only where Latin and a confusable script appear in one token.
+    """
+    if not any(ch in CONFUSABLES for ch in token):
+        return token
+    if not any("a" <= ch <= "z" for ch in token):
+        return token
+    return token.translate(_CONFUSABLE_TABLE)
 
 
 def normalize(text: str) -> str:
     """The normalization declared in prereg.scan.md §2.
 
-    NFKC, then drop format and combining characters, then casefold, then fold
-    declared confusables. The middle step is what stops a zero-width space or a
-    soft hyphen from being inserted into the middle of a withheld word.
+    NFKC, casefold, drop format characters and Latin-range combining marks,
+    then fold declared confusables in mixed-script tokens. Casefolding runs
+    before the strip because casefolding some characters *produces* combining
+    marks, and stripping first would leave those behind (agy, P1).
     """
-    t = unicodedata.normalize("NFKC", text)
-    t = "".join(ch for ch in t if unicodedata.category(ch) not in ("Cf", "Mn"))
-    return t.casefold().translate(CONFUSABLES)
+    t = unicodedata.normalize("NFKC", text).casefold()
+    t = "".join(ch for ch in t
+                if unicodedata.category(ch) != "Cf" and ch not in _MARKS)
+    return re.sub(r"\S+", lambda m: _fold_confusables(m.group(0)), t)
 
 
 def _literal_to_regex(literal: str) -> str:
@@ -126,10 +160,11 @@ def load_literals(path: pathlib.Path | None) -> dict:
 
 
 class Pattern:
-    __slots__ = ("cls", "name", "rx", "excl_g1", "excl_compounds", "severity", "target")
+    __slots__ = ("cls", "name", "rx", "excl_g1", "excl_compounds", "severity",
+                 "target", "scan_paths")
 
     def __init__(self, cls, name, rx, excl_g1=None, excl_compounds=(),
-                 severity="fail", target="content"):
+                 severity="fail", target="content", scan_paths=False):
         self.cls = cls
         self.name = name
         self.rx = rx
@@ -137,9 +172,10 @@ class Pattern:
         self.excl_compounds = tuple(excl_compounds)
         self.severity = severity
         self.target = target
+        self.scan_paths = scan_paths
 
 
-def _compile_inline(cid, spec, severity, target):
+def _compile_inline(cid, spec, severity, target, scan_paths):
     try:
         rx = re.compile(spec["regex"])
     except (KeyError, re.error) as e:
@@ -150,7 +186,8 @@ def _compile_inline(cid, spec, severity, target):
     except re.error as e:
         raise Undecidable(f"bad exclusion in {cid}/{spec.get('name')}: {e}") from e
     return Pattern(cid, spec.get("name") or "unnamed", rx, g1rx,
-                   severity=severity, target=target)
+                   severity=severity, target=target,
+                   scan_paths=bool(spec.get("scan_paths", scan_paths)))
 
 
 def compile_patterns(prereg: dict, literals: dict) -> tuple:
@@ -168,12 +205,18 @@ def compile_patterns(prereg: dict, literals: dict) -> tuple:
         severity = cls.get("severity", "fail")
         if severity not in ("fail", "warn"):
             raise Undecidable(f"class {cid} has unknown severity {severity!r}")
+        # No default. Whether a class's patterns are applied to file names is a
+        # decision with false positives on one side and a blind spot on the
+        # other, so the table has to state it rather than inherit it.
+        if "scan_paths" not in cls:
+            raise Undecidable(f"class {cid} does not declare scan_paths")
+        scan_paths = bool(cls["scan_paths"])
         source = cls.get("source")
         for spec in cls.get("path_patterns") or []:
-            out.append(_compile_inline(cid, spec, severity, "path"))
+            out.append(_compile_inline(cid, spec, severity, "path", True))
         if source == "inline":
             for spec in cls.get("patterns") or []:
-                out.append(_compile_inline(cid, spec, severity, "content"))
+                out.append(_compile_inline(cid, spec, severity, "content", scan_paths))
         elif source == "external_literal_file":
             entry = literals.get(cid)
             if entry is None:
@@ -203,7 +246,8 @@ def compile_patterns(prereg: dict, literals: dict) -> tuple:
                 rx = re.compile(_literal_to_regex(normalize(lit)))
                 out.append(Pattern(cid, f"{cid}:{normalize(lit)}", rx, None,
                                    [normalize(c) for c in compounds],
-                                   severity=severity, target="content"))
+                                   severity=severity, target="content",
+                                   scan_paths=scan_paths))
         else:
             raise Undecidable(f"class {cid} has unknown source {source!r}")
     if not out:
@@ -251,12 +295,20 @@ def _record(p, path, lineno, m):
 def scan_path_name(rel: str, patterns: list) -> list:
     """Match against the relative path itself, with **every** pattern.
 
-    Cross-review (cursor, P0, 2026-08-15) pointed out that a file called
+    Cross-review (cursor, P0) pointed out that a file called
     `people/<withheld name>.txt` with innocuous contents used to pass: only the
     one declared path pattern was applied to paths, so a filename was a place
-    to put withheld material where nothing looked. A path is content.
+    to put withheld material where nothing looked.
+
+    Applying *every* pattern was the wrong correction, and the next round said
+    so (agy, P0): ordinary source paths in unrelated projects became violations.
+    Which patterns look at names is now declared per class in the table, so the
+    trade is visible instead of incidental. The worked examples are in
+    docs/prereg.scan.md §9 — which is not itself scanned, so they can be spelled
+    out there without disqualifying the file they are written in.
     """
-    return _match_line(normalize(rel), patterns, rel, 0)
+    selected = [p for p in patterns if p.target == "path" or p.scan_paths]
+    return _match_line(normalize(rel), selected, rel, 0)
 
 
 def _match_line(line: str, patterns: list, path: str, lineno: int) -> list:

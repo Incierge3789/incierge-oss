@@ -70,8 +70,20 @@ for cls, payload in sorted(S.positive_controls(prereg, lits).items()):
     got = S.scan_path_name(f"notes/{payload}.txt", PATTERNS)
     check(f"PP1 {cls} is caught in a file name", any(h["class"] == cls for h in got),
           f"notes/{payload}.txt")
-check("PP2 **negative**: an ordinary path is not flagged",
-      S.scan_path_name("docs/architecture.md", PATTERNS) == [])
+for ordinary in ("docs/architecture.md", "app/users/auth.py", "src/home/index.html",
+                 "config.inc.php", "lib/common.inc.h"):
+    got = S.scan_path_name(ordinary, PATTERNS)
+    check(f"PP2 **negative**: {ordinary} is not flagged", got == [],
+          str(got[:2]))
+# which classes look at names is a declared decision, not an accident
+declared = {c["id"]: c.get("scan_paths") for c in prereg["classes"]}
+check("PP3 every class declares scan_paths", all(v is not None for v in declared.values()),
+      str([k for k, v in declared.items() if v is None]))
+check("PP4 the content-shape class opts out at class level",
+      declared.get("c_secret") is False, str(declared))
+check("PP5 **but its high-precision members opt back in**",
+      any(q.cls == "c_secret" and q.scan_paths for q in PATTERNS),
+      "no c_secret pattern is path-scanned, so a key in a file name would pass")
 
 print("== exclusions are pattern-level, and still let the bare literal through ==")
 compounded = [e for e in lits.get("d_person_literal", {}).get("literals", [])
@@ -110,6 +122,13 @@ check("X0b every declared pair is complete",
       str([p["name"] for _, p in paired if "example_hit" not in p or "example_miss" not in p]))
 for cid, p in paired:
     own = [q for q in PATTERNS if q.name == p["name"]]
+    # Without this, a renamed or dropped pattern makes X-miss pass over an
+    # empty pattern set — the control would go green because nothing was
+    # tested (agy, P2).
+    check(f"X-own  {p['name']} resolves to a compiled pattern", len(own) == 1,
+          f"{len(own)} compiled patterns named {p['name']}")
+    if not own:
+        continue
     check(f"X-hit  {p['name']} fires on its declared example",
           len(S.scan_text(p["example_hit"], own, "<t>")) > 0, p["example_hit"])
     check(f"X-miss {p['name']} **does not** fire on its declared exclusion",

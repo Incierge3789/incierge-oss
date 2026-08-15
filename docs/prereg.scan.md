@@ -57,13 +57,28 @@ both contain Latin-shaped characters. Closing that properly needs a confusables
 data file this scanner deliberately does not carry. Stated here rather than
 implied by silence.
 
-## 2b. The path is scanned too
+## 2b. The path is scanned, by the classes that declare it
 
-Every fail-severity pattern is applied to the **relative path** as well as to
-the file contents. A withheld name in a filename with innocuous contents used to
-pass, because only one declared pattern looked at paths. The same exclusions
-apply in both places, so a rule cannot mean one thing about contents and another
-about names.
+A withheld name in a filename with innocuous contents used to pass, because
+only one declared pattern looked at paths. Applying **every** pattern to paths
+was the obvious correction and it was wrong: `app/users/auth.py`,
+`config.inc.php` and `textures/ao_001.png` all became violations in ordinary
+projects, which is a guard nobody can keep switched on.
+
+So each class declares `scan_paths`, and **there is no default** — a class that
+omits it is undecidable, because "should a name be treated as content" is a
+trade with false positives on one side and a blind spot on the other, and a
+silent default hides which one was chosen.
+
+| class | `scan_paths` | why |
+|---|---|---|
+| `a_proper_noun`, `c_customer_literal`, `d_person_literal`, `d_person_shape` | true | these are names of things, and names end up in file names |
+| `b_ip_identifier` | true | same, and accepted with its cost: an unrelated project with `textures/ao_001.png` will see a hit. Class (b) is the most project-specific class here and an adopter is expected to replace it |
+| `c_secret` | false at class level | most of it matches shapes that occur in prose. Individual high-precision members — the private-key block, the vendor token patterns, the email address — override to true, so a key or an address in a file name is still caught |
+| `e_third_party_oss` | false | it declares its own `path_patterns` instead |
+
+The same exclusions apply in both places, so a rule cannot mean one thing about
+contents and another about names.
 
 ## 3. Exclusions (pattern-level only)
 
@@ -185,24 +200,27 @@ declared-empty), which is why §5b forces that to be printed rather than assumed
     {
       "id": "a_proper_noun",
       "title": "(a) proper nouns: company / product / archived-repo identifiers",
+      "scan_paths": true,
       "source": "external_literal_file",
       "match": "literal_with_separator_expansion"
     },
     {
       "id": "b_ip_identifier",
       "title": "(b) IP identifiers and their implementation names",
+      "scan_paths": true,
+      "_scan_paths_why": "these are names of things and turn up in file names. The cost is that a project with unrelated assets such as textures/ao_001.png will see hits; class (b) is the most project-specific class here and an adopter is expected to replace it.",
       "source": "inline",
       "patterns": [
-        {"name": "b1_filed_patent_id", "regex": "\\bpat[\\-_]?\\d{3,}\\b", "example_hit": "PAT-9999", "example_miss": "compatibility"},
-        {"name": "b2_future_patent_id", "regex": "\\bfp[\\-_]?\\d{3,}\\b"},
-        {"name": "b3_objective_id", "regex": "\\bao[\\-_]?\\d{3,}\\b"},
-        {"name": "b4_applicant_label", "regex": "\\bincierge[\\-_]\\d{3,}\\b", "example_hit": "applicant: Incierge-1001", "example_miss": "github.com/Incierge3789/incierge-oss", "_why_separator_required": "unlike the other three, dropping the separator here collides with the account name Incierge3789, which appears in the README and in config/allowed_remote.txt. Widening it flagged both. The applicant label always carries the hyphen."},
+        {"name": "b1_filed_patent_id", "regex": "\\bpat[\\s\\-_#.:]?\\d{3,}\\b", "example_hit": "PAT-9999", "example_miss": "compatibility"},
+        {"name": "b2_future_patent_id", "regex": "\\bfp[\\s\\-_#.:]?\\d{3,}\\b"},
+        {"name": "b3_objective_id", "regex": "\\bao[\\s\\-_#.:]?\\d{3,}\\b"},
+        {"name": "b4_applicant_label", "regex": "\\bincierge[\\s\\-_#.:]\\d{3,}\\b", "example_hit": "applicant: Incierge-1001", "example_miss": "github.com/Incierge3789/incierge-oss", "_why_separator_required": "unlike the other three, dropping the separator here collides with the account name Incierge3789, which appears in the README and in config/allowed_remote.txt. Widening it flagged both. The applicant label always carries the hyphen."},
         {"name": "b5_impl_span_shred", "regex": "span[\\s\\-_]*shred"},
         {"name": "b6_impl_span_dag", "regex": "span[\\s\\-_]*dag"},
         {"name": "b7_impl_dag_audit", "regex": "dag[\\s\\-_]*audit"},
         {"name": "b8_impl_trust_algebra", "regex": "trust[\\s\\-_]*algebra"},
         {"name": "b9_impl_purpose_bound_crypto", "regex": "purpose[\\s\\-_]*bound[\\s\\-_]*crypto"},
-        {"name": "b10_impl_ja_gateway", "regex": "最小開示ゲートウェイ"},
+        {"name": "b10_impl_ja_gateway", "regex": "最小開示[\\s・\\-_]*ゲートウ[ェエ]イ"},
         {"name": "b11_impl_ja_autonomous_defense", "regex": "自律防御"}
       ],
       "positive_control": "PAT-999"
@@ -210,27 +228,30 @@ declared-empty), which is why §5b forces that to be printed rather than assumed
     {
       "id": "c_secret",
       "title": "(c) secrets: keys, tokens, addresses, internal endpoints, customer markers",
+      "scan_paths": false,
+      "_scan_paths_why": "most of this class matches shapes that occur in prose, and applying them to paths flagged app/users/auth.py and config.inc.php in ordinary projects. The high-precision members override to true individually.",
       "source": "inline",
       "patterns": [
-        {"name": "c1_private_key_block", "regex": "-----begin (?:[a-z0-9 ]+ )?private key-----"},
-        {"name": "c2_github_pat", "regex": "\\bghp_[a-z0-9]{36}\\b"},
-        {"name": "c2_github_fine_grained", "regex": "\\bgithub_pat_[a-z0-9_]{22,}"},
-        {"name": "c2_openai_key", "regex": "\\bsk-[a-z0-9_-]{20,}", "example_hit": "sk-proj-abc123def456ghi789jkl012mno345pqr678", "example_miss": "sk-short"},
-        {"name": "c2_anthropic_key", "regex": "\\bsk-ant-[a-z0-9\\-_]{20,}"},
-        {"name": "c2_aws_access_key", "regex": "\\b(?:akia|asia)[0-9a-z]{16}\\b"},
-        {"name": "c2_slack_token", "regex": "\\bxox[baprs]-[a-z0-9-]{10,}"},
-        {"name": "c2_google_api_key", "regex": "\\baiza[0-9a-z_\\-]{35}\\b"},
-        {"name": "c2_gitlab_pat", "regex": "\\bglpat-[a-z0-9_\\-]{20,}"},
+        {"name": "c1_private_key_block", "regex": "-----begin (?:[a-z0-9 ]+ )?private key(?: block)?-----", "scan_paths": true},
+        {"name": "c2_github_pat", "regex": "\\bgh[pours]_[a-z0-9]{36}\\b", "scan_paths": true, "_why": "gho_/ghu_/ghs_/ghr_ are the OAuth, user, server and refresh forms; only ghp_ was covered"},
+        {"name": "c2_github_fine_grained", "regex": "\\bgithub_pat_[a-z0-9_]{22,}", "scan_paths": true},
+        {"name": "c2_openai_key", "regex": "\\bsk-[a-z0-9_-]{20,}", "scan_paths": true, "example_hit": "sk-proj-abc123def456ghi789jkl012mno345pqr678", "example_miss": "sk-short"},
+        {"name": "c2_anthropic_key", "regex": "\\bsk-ant-[a-z0-9\\-_]{20,}", "scan_paths": true},
+        {"name": "c2_aws_access_key", "regex": "\\b(?:akia|asia|aida|aroa|aipa|anpa|arca)[0-9a-z]{16}\\b", "scan_paths": true},
+        {"name": "c2_slack_token", "regex": "\\bxox[baprs]-[a-z0-9-]{10,}", "scan_paths": true},
+        {"name": "c2_google_api_key", "regex": "\\baiza[0-9a-z_\\-]{35}\\b", "scan_paths": true},
+        {"name": "c2_gitlab_pat", "regex": "\\bglpat-[a-z0-9_\\-]{20,}", "scan_paths": true},
         {
           "name": "c3_assigned_credential",
           "regex": "(?:api[_-]?key|secret|token|password|passwd|passphrase|credential|private[_-]?key)\\s*[:=]\\s*[\"']([^\"'\\n]{8,})[\"']",
-          "exclude_if_group1_matches": "^(?:<[^>]*>|\\$\\{[^}]*\\}|\\$[a-z_][a-z0-9_]*|x{3,}|\\*{3,}|\\.{3,}|changeme|change[_-]me|placeholder|redacted|example|example[_-]key|dummy|sample|fake|test|testing|test[_-]key|your[_-](?:api[_-])?(?:key|token|secret|password)(?:[_-]here)?|null|none|true|false|\\d+|os\\.environ.*|process\\.env.*|secrets\\..*|env\\[.*)$",
+          "exclude_if_group1_matches": "^(?:<[^>]*>|\\$\\{[^}]*\\}|\\$[a-z_][a-z0-9_]*|x{3,}|\\*{3,}|\\.{3,}|changeme|change[_-]me|placeholder|redacted|example|example[_-]key|dummy|sample|fake|test|testing|test[_-]key|your[_-](?:api[_-])?(?:key|token|secret|password)(?:[_-]here)?|\\{\\{[^}]*\\}\\}|\\{[a-z0-9_ ]+\\}|%[a-z0-9_]+%|@[a-z0-9_]+@|replace[_-]me|replace[_-]with[_-].*|undefined|password|passwd|secret|token|mock[_-].*|default[_-].*|null|none|true|false|\\d+|os\\.environ.*|process\\.env.*|secrets\\..*|env\\[.*)$",
           "example_hit": "password = \"example_hunter2_production\"",
           "example_miss": "api_key = \"${SOME_ENV_VAR}\""
         },
         {
           "name": "c4_email_address",
           "regex": "\\b[a-z0-9._%+-]+@([a-z0-9.-]+\\.[a-z]{2,})\\b",
+          "scan_paths": true,
           "exclude_if_group1_matches": "^(?:(?:[a-z0-9-]+\\.)*example\\.(?:com|net|org|edu)|(?:[a-z0-9-]+\\.)*(?:invalid|test|localhost))$",
           "example_hit": "write to someone@a-real-looking-host.jp",
           "example_miss": "write to someone@example.com"
@@ -239,16 +260,16 @@ declared-empty), which is why §5b forces that to be printed rather than assumed
         {"name": "c5_internal_tld", "regex": "\\bhttps?://[a-z0-9.-]+\\.(?:internal|intranet|lan|corp|local)\\b"},
         {"name": "c5_service_account", "regex": "[a-z0-9-]+@[a-z0-9-]+\\.iam\\.gserviceaccount\\.com"},
         {"name": "c5_tunnel_host", "regex": "\\b[a-z0-9-]+\\.(?:ngrok\\.io|ngrok-free\\.app|ts\\.net)\\b"},
-        {"name": "c6_local_user_path_unix", "regex": "(?:/users|/home)/[a-z0-9._-]+", "example_hit": "export USER_HOME=/Users/alice", "example_miss": "see the /home directory"},
+        {"name": "c6_local_user_path_unix", "regex": "(?:^|[\\s\"'=(:,])(?:/users|/home)/[a-z0-9._-]+", "example_hit": "export USER_HOME=/Users/alice", "example_miss": "the app/users/auth.py module"},
         {"name": "c6_local_user_path_win", "regex": "c:\\\\users\\\\[a-z0-9._-]+"},
         {"name": "c7_ja_company_suffix", "regex": "株式会社|合同会社|有限会社|（株）|\\(株\\)"},
         {"name": "c7_ja_customer_honorific", "regex": "御中|貴社"},
-        {"name": "c7_en_company_suffix", "regex": "\\b(?:k\\.k\\.|co\\.,\\s*ltd\\.?|\\binc\\.)"},
+        {"name": "c7_en_company_suffix", "regex": "(?:\\bk\\.k\\.|co\\.,\\s*ltd\\.?|[a-z0-9]\\s+inc\\.)", "example_hit": "acquired by Acme Inc. last year", "example_miss": "see config.inc.php"},
         {"name": "c8_monetary_amount_jpy_symbol", "regex": "¥\\s?\\d[\\d,]*"},
-        {"name": "c8_monetary_amount_jpy_word", "regex": "\\d[\\d,]*\\s?(?:円|万円|億円)"},
+        {"name": "c8_monetary_amount_jpy_word", "regex": "[\\d,一二三四五六七八九十百千万億兆]+\\s?(?:円|万円|億円)"},
         {"name": "c8_monetary_amount_iso", "regex": "\\b(?:jpy|usd|eur|gbp)\\s?\\d[\\d,]*"},
         {"name": "c8_monetary_amount_grouped", "regex": "\\$\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?"},
-        {"name": "c8_monetary_amount_plain", "regex": "\\$\\s?\\d{3,}(?:\\.\\d+)?\\b", "example_hit": "server_cost: $1200", "example_miss": "use $1 for the first argument"},
+        {"name": "c8_monetary_amount_plain", "regex": "\\$\\s?\\d{2,}(?:\\.\\d+)?\\b", "example_hit": "price: $50", "example_miss": "use $1 for the first argument", "_known_limit": "a single-digit amount is not detected, because $1..$9 are shell positional parameters and flagging them would make the guard unusable in any repository containing shell"},
         {"name": "c8_monetary_amount_cents", "regex": "\\$\\s?\\d+\\.\\d{2}\\b"},
         {"name": "c8_monetary_amount_scaled", "regex": "\\$\\d+(?:\\.\\d+)?\\s?(?:million|billion|trillion|[mbk])\\b"},
         {"name": "c9_business_document", "regex": "見積書|請求書|契約書|提案書|議事録|稟議|発注書|納品書|覚書|基本合意|秘密保持契約|\\bnda\\b"},
@@ -259,24 +280,26 @@ declared-empty), which is why §5b forces that to be printed rather than assumed
     {
       "id": "c_customer_literal",
       "title": "(c) customer names: literal list",
+      "scan_paths": true,
       "source": "external_literal_file",
       "match": "literal_with_separator_expansion"
     },
     {
       "id": "d_person_shape",
       "title": "(d) person names by honorific shape (generic; literals live in the literals file)",
+      "scan_paths": true,
       "source": "inline",
       "patterns": [
         {
           "name": "d1_ja_honorific",
-          "regex": "([\\u4e00-\\u9fff\\u3005]{1,4})(?:さん|氏|様|社長|部長|課長|専務|取締役|殿)",
-          "exclude_if_group1_matches": "^(?:氏|摂|華|姓|某|同|両|彼|当|本|各|全|副|次|部|課|会|社|支|支店|代表|仕|多|一|異|模|様|神|王|奥|坊|文|同)$",
+          "regex": "([\\u4e00-\\u9fff\\u3005]{1,4})(?:さん|氏|様|君|くん|先生|教授|社長|部長|課長|専務|取締役|殿)",
+          "exclude_if_group1_matches": "^(?:氏|摂|華|姓|某|同|両|彼|当|本|各|全|副|次|部|課|会|社|支|支店|代表|仕|多|一|異|模|様|神|王|奥|坊|文|諸|貴|主|君|父|母|人|学|先)$",
           "example_hit": "山田さん",
           "example_miss": "摂氏"
         },
         {
           "name": "d2_katakana_honorific",
-          "regex": "([\\u30a1-\\u30fa\\u30fc]{2,8})(?:さん|氏|様|社長|部長|課長|専務|取締役|殿)",
+          "regex": "([\\u30a1-\\u30fa\\u30fc]{2,8})(?:さん|氏|様|君|くん|先生|教授|社長|部長|課長|専務|取締役|殿)",
           "example_hit": "担当はアリスさんです",
           "example_miss": "カタカナ"
         }
@@ -287,6 +310,7 @@ declared-empty), which is why §5b forces that to be printed rather than assumed
     {
       "id": "d_person_literal",
       "title": "(d) person names: literal surnames (romaji included)",
+      "scan_paths": true,
       "source": "external_literal_file",
       "match": "literal_with_separator_expansion"
     },
@@ -294,6 +318,7 @@ declared-empty), which is why §5b forces that to be printed rather than assumed
       "id": "e_third_party_oss",
       "title": "(e) third-party OSS carried into the publication set",
       "severity": "warn",
+      "scan_paths": false,
       "source": "inline",
       "remedy": "Do not relicense. Either remove the material, or add a NOTICE file that reproduces the third-party copyright and license text separately from Apache-2.0.",
       "patterns": [
@@ -383,3 +408,33 @@ unscannable.
 Each closed hole is recorded as that pattern's `example_hit`, so re-opening it
 fails the suite rather than passing quietly. That is the ratchet — the log above
 is prose, the examples are the enforcement.
+
+### Amendment 2 — 2026-08-15, cross-review round 2
+
+The second round was asked one question: **what did the first round's repairs
+break?** The answer was four things, which is why the round happened.
+
+| what round 1 did | what it broke | what round 2 did |
+|---|---|---|
+| stripped every Unicode `Mn` | mangled scripts that need combining marks to spell ordinary words — Devanagari nukta, Arabic harakat, Ainu kana. It also ran before `casefold()`, which *produces* combining marks for some characters, so those survived anyway | strip only the Latin-range diacritic blocks and variation selectors, after casefolding |
+| folded confusables everywhere | Greek `ρατ-100` folded to `pat-100` and disqualified an innocent file; a Greek word ending `-ακια` before a 16-character identifier folded into an AWS key match | fold only inside a token that also contains ASCII letters, which is where the actual attack lives |
+| applied every pattern to paths | ordinary source paths became violations (see §2b) | `scan_paths` declared per class, no default |
+| narrowed the placeholder exclusion to exact tokens | ordinary template placeholders — `{{ VAR }}`, `%VAR%`, `@VAR@`, `replace_me` — were reported as secrets, which is the pressure that gets a guard disabled | those forms added back as exact shapes; the prefix wildcards that caused the original hole stayed out |
+
+Round 2 also found nine false negatives that both earlier rounds had missed:
+`PAT 9999` with a space, `PGP PRIVATE KEY BLOCK`, the `gho_`/`ghu_`/`ghs_`
+token forms, the `aida`/`aroa`/`arca` AWS key prefixes, two-digit amounts,
+kanji numerals before `円`, the honorifics `先生`/`教授`/`君`/`くん`, and a
+spelling variant of one Japanese implementation name. All are closed and all
+are in the direction §9 permits.
+
+Two controls were also passing for the wrong reason and are fixed in the tests
+rather than here: the hook control accepted one class's hit as evidence for
+another (the shape payload contains the literal payload), and the
+`example_miss` loop passed vacuously when a pattern name no longer resolved.
+
+**The full set was re-scanned after every one of these.** One self-inflicted hit
+appeared and was fixed rather than excused: the scanner's own source comments
+quoted `ao_001` and `pat-100` as counterexamples, which its own widened patterns
+then matched. The worked examples now live here, in the one file the scan does
+not read.

@@ -31,7 +31,7 @@ cd "$ROOT" || reject "cannot enter repository root"
 # therefore asserted positively, by the markers this repository must contain,
 # which also rejects the case the path test was aiming at: these hooks copied
 # into some other checkout.
-for marker in docs/prereg.scan.md config/allowed_remote.txt scripts/scan_forensic.py; do
+for marker in docs/prereg.scan.md config/allowed_remote.txt scripts/scan_forensic.py scripts/canonical_remote.py; do
     [ -f "$marker" ] || reject "missing marker $marker — these hooks are not in their own repository"
 done
 
@@ -58,11 +58,22 @@ FORBIDDEN_FILE="config/forbidden_remotes.txt"
 [ -f "$FORBIDDEN_FILE" ] || reject "$FORBIDDEN_FILE is missing — cannot decide, so refusing"
 
 PY=${PYTHON:-python3}
+# Canonicalize before comparing or hashing. The same destination has many
+# spellings (ssh vs https, trailing slash, .git suffix, host case), and a raw
+# string comparison let five of six spellings past the deny-list while
+# rejecting the developer who used ssh for the allowed remote (agy, P0).
 digest_of() {
-    "$PY" -c 'import hashlib,sys;print(hashlib.sha256(sys.argv[1].encode()).hexdigest())' "$1" 2>/dev/null
+    "$PY" scripts/canonical_remote.py --digest "$1" 2>/dev/null
+}
+canon_of() {
+    "$PY" scripts/canonical_remote.py "$1" 2>/dev/null
 }
 D_REMOTE=$(digest_of "$REMOTE_URL")
 D_ALLOWED=$(digest_of "$ALLOWED")
+C_REMOTE=$(canon_of "$REMOTE_URL")
+C_ALLOWED=$(canon_of "$ALLOWED")
+[ -n "${C_REMOTE:-}" ] || reject "cannot canonicalize the remote URL — cannot decide, so refusing"
+[ -n "${C_ALLOWED:-}" ] || reject "cannot canonicalize the allowed remote — cannot decide, so refusing"
 for d in "$D_REMOTE" "$D_ALLOWED"; do
     case "$d" in
         [0-9a-f][0-9a-f]*) ;;
@@ -81,7 +92,7 @@ done < "$FORBIDDEN_FILE"
 [ "$ENTRIES" -gt 0 ] || reject "$FORBIDDEN_FILE lists no entries — an empty deny-list is not a checked deny-list"
 
 # --- allow-list -----------------------------------------------------------
-if [ "$REMOTE_URL" != "$ALLOWED" ]; then
+if [ "$C_REMOTE" != "$C_ALLOWED" ]; then
     reject "remote '$REMOTE_NAME' is $REMOTE_URL, allowed is $ALLOWED"
 fi
 

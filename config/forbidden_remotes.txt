@@ -1,7 +1,7 @@
 # Remotes that must never receive a push from this repository.
 #
-# Stored as sha256 digests of the exact remote URL string, not as the URLs
-# themselves. Writing the private repository's URL in plain text here would
+# Stored as sha256 digests of the CANONICAL form of the remote URL (see
+# scripts/canonical_remote.py), not as the URLs themselves. Writing the private repository's URL in plain text here would
 # publish, in the guard, one of the things the guard exists to keep unpublished
 # — the same shape of mistake as a deny-list that leaks its own entries.
 # Cross-review (agy, P1, 2026-08-15) caught the plaintext version.
@@ -13,7 +13,10 @@
 # no usable entries are all treated as undecidable and reject the push.
 #
 # Add an entry with:
-#   python3 -c 'import hashlib,sys;print(hashlib.sha256(sys.argv[1].encode()).hexdigest())' <url>
+#   python3 scripts/canonical_remote.py --digest <url>
+#
+# Canonicalizing first is what makes the entry cover every spelling of the same
+# destination — ssh and https, with or without .git, any host case.
 
 # the private repository this publication was extracted from
-327e48d9db67315a93c0a8c09099336990b1078b8780bb20673c157e7646629b
+a9e8101f5261d4e0f3e7407452aab9388bb87d7f509fbde560738991a4fa3bcf

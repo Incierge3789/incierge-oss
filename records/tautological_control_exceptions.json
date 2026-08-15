@@ -1,6 +1,6 @@
 {
   "ts": "2026-08-15",
-  "rule": "**cannot grow**. compared as a set of paths",
+  "rule": "**\u5897\u3084\u305b\u306a\u3044**\u3002path \u96c6\u5408\u3067\u6bd4\u8f03\u3059\u308b",
   "count": 0,
   "paths": [],
   "generated_by": "scripts/tautological_control_gate.py --write-exceptions"
